@@ -37,8 +37,6 @@ jobs:
             exit 1
           fi
           tail -25 build.log
-      - name: Verify packaged APK resources
-        run: python3 scripts/check_assets.py --apk app/build/outputs/apk/debug/app-debug.apk
       - name: Save APK as a retrievable Git object
         continue-on-error: true
         env:
@@ -54,6 +52,14 @@ jobs:
           name: 2D-WORLD-Engine-debug-APK
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+      - name: Verify packaged APK resources
+        run: |
+          unzip -l app/build/outputs/apk/debug/app-debug.apk | grep -E 'export-runtime/gradle-wrapper|assets/library/catalog.json' | while IFS= read -r line; do echo "::notice::$line"; done
+          if ! python3 scripts/check_assets.py --apk app/build/outputs/apk/debug/app-debug.apk > /tmp/apk-validation.log 2>&1; then
+            tail -6 /tmp/apk-validation.log | while IFS= read -r line; do echo "::error::$line"; done
+            exit 1
+          fi
+          tail -2 /tmp/apk-validation.log
       - name: Compile game-export instrumentation test
         continue-on-error: true
         run: |
