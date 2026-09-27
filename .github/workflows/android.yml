@@ -83,6 +83,11 @@ jobs:
             find "$HOME/.android" "$ANDROID_AVD_HOME" -maxdepth 3 -name '*.ini' 2>/dev/null | while IFS= read -r line; do echo "::notice::Found AVD config: $line"; done
             exit 0
           fi
+          if [ -e /dev/kvm ]; then
+            ls -l /dev/kvm | while IFS= read -r line; do echo "::notice::$line"; done
+            sudo chmod 666 /dev/kvm
+          fi
+          "$SDK/emulator/emulator" -accel-check | while IFS= read -r line; do echo "::notice::$line"; done
           "$SDK/emulator/emulator" -avd world-smoke -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -memory 2048 > /tmp/emulator.log 2>&1 &
           EMULATOR_PID=$!
           trap 'kill "$EMULATOR_PID" 2>/dev/null || true' EXIT

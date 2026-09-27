@@ -489,6 +489,10 @@ public final class MainActivity extends Activity implements SceneView.Events {
                         selectedId=null;viewport.setSelected(null);})).setNegativeButton("Cancel",null).show();break;}
         }).show();}
     public void selectNode(String id){selectedId=id;if(viewport!=null)viewport.setSelected(id);refreshPanel();}
+    public void focusObject(String sceneId,String nodeId){
+        if(scene==null||!sceneId.equals(scene.optString("id")))switchScene(sceneId);
+        selectNode(nodeId);openPanel("Inspector");
+    }
     private void reparent(JSONObject node){List<JSONObject> options=new ArrayList<>();
         JSONArray nodes=GameProject.nodes(scene);
         List<JSONObject> descendants=GameProject.subtree(scene,node.optString("id"));

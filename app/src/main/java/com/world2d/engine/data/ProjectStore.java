@@ -158,7 +158,7 @@ public final class ProjectStore {
             extension=dot<0?"":label.substring(dot+1).toLowerCase(java.util.Locale.ROOT);
             if(extension.equals("jpeg"))extension="jpg";
             if(!extension.matches("png|jpg|webp|gif|wav|mp3|ogg|m4a|aac"))
-                throw new IOException("File type not recognized. Use PNG, JPG, WEBP, GIF, WAV, MP3, OGG or M4A.");
+                throw new IOException("File type not recognized. Use PNG, JPG, WEBP, GIF, WAV, MP3, OGG, M4A or AAC.");
             mime=extension.matches("png|jpg|webp|gif")?"image/"+extension:"audio/"+extension;
         }else switch(mime){
             case "image/png":extension="png";break;

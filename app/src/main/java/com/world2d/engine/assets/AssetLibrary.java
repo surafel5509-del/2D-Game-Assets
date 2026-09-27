@@ -30,7 +30,7 @@ public final class AssetLibrary {
     public static final class Entry {
         public final String id, name, category, kind, path, license, origin, modular;
         public final int width, height;
-        public final JSONArray parts;
+        public final JSONArray parts, tags;
         public final boolean builtin;
         public final double offsetX, offsetY;
         Entry(JSONObject o, boolean builtin) {
@@ -40,7 +40,8 @@ public final class AssetLibrary {
             this.license = o.optString("license"); this.origin = o.optString("origin");
             this.modular = o.optString("modular");
             this.width = o.optInt("width", 64); this.height = o.optInt("height", 64);
-            this.parts = o.optJSONArray("parts"); this.builtin = builtin;
+            this.parts = o.optJSONArray("parts"); this.tags = o.optJSONArray("tags");
+            this.builtin = builtin;
             this.offsetX = o.optDouble("x"); this.offsetY = o.optDouble("y");
         }
     }

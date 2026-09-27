@@ -175,7 +175,12 @@ public final class Panels {
         for(AssetLibrary.Entry entry:a.library.all(a.project)){
             if(category.equals("Favorites")&&(a.project==null||!a.library.favorite(a.project,entry.id)))continue;
             if(!category.equals("All")&&!category.equals("Favorites")&&!category.equals(entry.category))continue;
-            if(!needle.isEmpty()&&!entry.name.toLowerCase().contains(needle)&&!entry.id.toLowerCase().contains(needle))continue;
+            if(!needle.isEmpty()&&!entry.name.toLowerCase().contains(needle)&&!entry.id.toLowerCase().contains(needle)){
+                boolean matched=false;
+                if(entry.tags!=null)for(int t=0;t<entry.tags.length();t++)
+                    if(entry.tags.optString(t).toLowerCase().contains(needle)){matched=true;break;}
+                if(!matched)continue;
+            }
             results.add(entry);
         }
         Ui.add(container,Ui.text(a,results.size()+" resources",11,Ui.MUTED,false),-1,26);
@@ -231,7 +236,7 @@ public final class Panels {
         if(entry.parts!=null&&entry.parts.length()>0)
             Ui.add(details,Ui.text(a,"◈  "+entry.parts.length()+" editable parts · split-ready",11,Ui.GREEN,true),-1,25);
         if(a.project!=null){List<String> uses=a.store.assetUses(a.project,entry.id);
-            Ui.add(details,Ui.text(a,"Used in "+uses.size()+" scene location(s)",11,Ui.MUTED,false),-1,24);
+            Ui.add(details,Ui.text(a,"Used in "+uses.size()+" project reference(s)",11,Ui.MUTED,false),-1,24);
             if(!uses.isEmpty())Ui.add(details,Ui.text(a,uses.get(0),10,Ui.GREEN,false),-1,22);
         }
         Ui.add(details,Ui.text(a,"LICENSE  /  "+entry.license,11,Ui.MUTED,false),-1,-2);
@@ -244,6 +249,14 @@ public final class Panels {
             gap(details,7);
         }
         if(a.project!=null){
+            List<String> locations=a.store.assetUses(a.project,entry.id);
+            if(!locations.isEmpty()){
+                button(details,"⌕  Find all "+locations.size()+" uses",false,()->
+                    new AlertDialog.Builder(a).setTitle("References to "+entry.name)
+                        .setItems(locations.toArray(new String[0]),(d,index)->{
+                            dialog.dismiss();a.closePanel();locateAssetUse(a,locations.get(index));
+                        }).setNegativeButton("Close",null).show());gap(details,7);
+            }
             if(entry.kind.equals("image")){
                 button(details,"＋  Use in scene",true,()->{dialog.dismiss();a.closePanel();
                     a.viewport.setPlacement(entry.id);a.notify("Tap the viewport to place "+entry.name);});gap(details,7);
@@ -263,6 +276,22 @@ public final class Panels {
         dialog.show();
         int max=(int)(a.getResources().getDisplayMetrics().heightPixels*0.78f);
         if(dialog.getWindow()!=null)dialog.getWindow().setLayout(-1,Math.min(max,Ui.dp(a,620)));
+    }
+    private static void locateAssetUse(MainActivity a,String location){
+        if(location.startsWith("Animation / ")){a.switchPanel("Animation");return;}
+        if(location.startsWith("Prefab / ")){prefabs(a);return;}
+        for(int s=0;s<a.project.scenes().length();s++){
+            JSONObject scene=J.at(a.project.scenes(),s);
+            JSONArray nodes=GameProject.nodes(scene);
+            for(int n=0;n<nodes.length();n++){
+                JSONObject node=J.at(nodes,n);
+                String base=scene.optString("name")+" / "+node.optString("name");
+                if(location.equals(base)||location.equals(base+" (tilemap)")){
+                    a.focusObject(scene.optString("id"),node.optString("id"));return;
+                }
+            }
+        }
+        a.notify("The referenced object is no longer available.");
     }
     private static void duplicateAsset(MainActivity a,AssetLibrary.Entry entry){
         if(a.project==null)return;
@@ -301,17 +330,13 @@ public final class Panels {
     }
     private static void deleteAsset(MainActivity a,AssetLibrary.Entry entry){
         List<String> uses=a.store.assetUses(a.project,entry.id);
-        for(int i=0;i<a.project.animations().length();i++){
-            JSONArray frames=J.at(a.project.animations(),i).optJSONArray("frames");
-            if(frames!=null)for(int f=0;f<frames.length();f++)if(entry.id.equals(J.at(frames,f).optString("assetId")))uses.add("Animation frame");
-        }
         if(!uses.isEmpty()){a.notify("Cannot delete: referenced by "+uses.get(0));return;}
-        new AlertDialog.Builder(a).setTitle("Delete "+entry.name+"?")
-            .setMessage("The resource has no active references. This removes its project file.")
-            .setPositiveButton("Delete",(d,w)->{a.edit(()->{
+        new AlertDialog.Builder(a).setTitle("Remove "+entry.name+"?")
+            .setMessage("This removes it from the project library. The original file is kept locally so undo and older backups remain usable.")
+            .setPositiveButton("Remove",(d,w)->{a.edit(()->{
                 JSONArray items=a.project.assets();for(int i=items.length()-1;i>=0;i--)
                     if(entry.id.equals(J.at(items,i).optString("id")))items.remove(i);
-            });File file=a.store.assetFile(a.project,entry.path);if(file!=null)file.delete();a.notify("Asset deleted");})
+            });a.notify("Asset removed. Undo is available.");})
             .setNegativeButton("Cancel",null).show();
     }
     private static View inspector(MainActivity a){
