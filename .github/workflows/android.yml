@@ -59,3 +59,49 @@ jobs:
           images=$(find "$SDK/system-images" -name system.img -print -quit 2>/dev/null || true)
           emulator=$(find "$SDK/emulator" -name emulator -type f -print -quit 2>/dev/null || true)
           echo "::notice::Emulator: ${emulator:-unavailable}; system image: ${images:-unavailable}; KVM: $(test -e /dev/kvm && echo yes || echo no)"
+      - name: Emulator dashboard smoke test (best effort)
+        continue-on-error: true
+        timeout-minutes: 8
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          MANAGER="$SDK/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$MANAGER" ]; then echo '::warning::No SDK manager; device smoke test unavailable'; exit 0; fi
+          if ! (yes || true) | timeout 270 "$MANAGER" --install 'emulator' 'system-images;android-35;default;x86_64' > /tmp/emulator-install.log 2>&1; then
+            echo '::warning::Cannot install emulator/system image on runner; APK compile still passed'
+            tail -4 /tmp/emulator-install.log | while IFS= read -r line; do echo "::notice::$line"; done
+            exit 0
+          fi
+          printf 'no\n' | "$SDK/cmdline-tools/latest/bin/avdmanager" create avd -n world-smoke -k 'system-images;android-35;default;x86_64' --force > /tmp/avd.log 2>&1
+          "$SDK/emulator/emulator" -avd world-smoke -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -memory 2048 > /tmp/emulator.log 2>&1 &
+          EMULATOR_PID=$!
+          trap 'kill "$EMULATOR_PID" 2>/dev/null || true' EXIT
+          ADB="$SDK/platform-tools/adb"
+          timeout 110 "$ADB" wait-for-device
+          ready=0
+          for i in $(seq 1 75); do
+            if [ "$("$ADB" shell getprop sys.boot_completed | tr -d '\r')" = 1 ]; then ready=1; break; fi
+            sleep 2
+          done
+          if [ "$ready" -ne 1 ]; then echo '::error::Emulator did not finish booting'; tail -15 /tmp/emulator.log; exit 1; fi
+          "$ADB" install -r app/build/outputs/apk/debug/app-debug.apk
+          "$ADB" shell am start -W -n com.world2d.engine/.editor.MainActivity
+          sleep 12
+          "$ADB" shell uiautomator dump /sdcard/world-smoke.xml > /tmp/ui.log 2>&1 || true
+          "$ADB" shell cat /sdcard/world-smoke.xml > /tmp/world-smoke.xml 2>/dev/null || true
+          if grep -q 'LEARN BY PLAYING\|New project' /tmp/world-smoke.xml; then
+            echo '::notice::Native dashboard rendered and example project cards were visible on emulator'
+          else
+            echo '::error::Dashboard UI was not visible after launch'
+            tail -20 /tmp/ui.log
+            exit 1
+          fi
+          "$ADB" exec-out screencap -p > /tmp/world-smoke.png
+          printf '{"content":"' > /tmp/world-smoke-blob.json
+          base64 -w0 /tmp/world-smoke.png >> /tmp/world-smoke-blob.json
+          printf '","encoding":"base64"}' >> /tmp/world-smoke-blob.json
+          IMAGE_SHA=$(gh api -X POST "repos/${{ github.repository }}/git/blobs" --input /tmp/world-smoke-blob.json --jq .sha)
+          echo "::notice::EMULATOR_SCREENSHOT_GIT_BLOB_SHA=$IMAGE_SHA"
+          "$ADB" logcat -d -t 800 -s AndroidRuntime:E > /tmp/crash.log
+          if grep -q 'FATAL EXCEPTION' /tmp/crash.log; then tail -25 /tmp/crash.log; echo '::error::App crashed on emulator'; exit 1; fi
