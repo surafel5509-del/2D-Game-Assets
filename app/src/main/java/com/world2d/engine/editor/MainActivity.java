@@ -111,8 +111,8 @@ public final class MainActivity extends Activity implements SceneView.Events {
     public String assetSearch(){return assetSearch;}
     public void assetFilter(String category,String search){assetCategory=category;assetSearch=search;refreshPanel();}
     public void remember(){if(project==null)return;past.push(project.snapshot());while(past.size()>40)past.removeLast();future.clear();}
-    public void edit(Runnable change){remember();change.run();changed(true);}
-    private void changed(boolean refresh){
+    public void edit(Runnable change){remember();change.run();markChanged(true);}
+    private void markChanged(boolean refresh){
         if(project==null)return;project.touch();dirty=true;
         handler.removeCallbacks(recovery);handler.postDelayed(recovery,1400);
         if(viewport!=null)viewport.invalidate();
@@ -127,11 +127,11 @@ public final class MainActivity extends Activity implements SceneView.Events {
     private void undo(){if(past.isEmpty())return;future.push(project.snapshot());
         String id=scene.optString("id");project=past.pop();scene=project.scene(id);
         if(scene==null)scene=project.firstScene();viewport.setProject(project,scene);viewport.setSelected(selectedId);
-        changed(true);}
+        markChanged(true);}
     private void redo(){if(future.isEmpty())return;past.push(project.snapshot());
         String id=scene.optString("id");project=future.pop();scene=project.scene(id);
         if(scene==null)scene=project.firstScene();viewport.setProject(project,scene);viewport.setSelected(selectedId);
-        changed(true);}
+        markChanged(true);}
     private void showHome(){
         if(panelDialog!=null){panelDialog.dismiss();panelDialog=null;}
         if(viewport!=null){viewport.setRuntime(null);viewport.setAlive(false);}
@@ -619,7 +619,7 @@ public final class MainActivity extends Activity implements SceneView.Events {
                 }else try(java.io.InputStream in=getContentResolver().openInputStream(uri)){imported=store.importZip(in);}
                 openEditor(imported,null);notify("Project imported");
             }else if(code==OPEN_ASSET&&project!=null){
-                JSONObject asset=store.importAsset(project,uri);changed(true);
+                JSONObject asset=store.importAsset(project,uri);markChanged(true);
                 notify("Imported "+asset.optString("name"));
             }else if(code==OPEN_SHEET&&project!=null)Panels.sliceSheet(this,uri);
             else if(code==SAVE_PROJECT&&project!=null){
@@ -722,7 +722,7 @@ public final class MainActivity extends Activity implements SceneView.Events {
     }
     @Override public void selected(String id){selectedId=id;refreshPanel();}
     @Override public void beginGesture(){remember();}
-    @Override public void changed(boolean gestureFinished){changed(gestureFinished);}
+    @Override public void changed(boolean gestureFinished){markChanged(gestureFinished);}
     @Override public void place(String id,float x,float y){placeAsset(id,x,y,true);}
     @Override public void hint(String text){notify(text);}
     @Override public void onBackPressed(){
