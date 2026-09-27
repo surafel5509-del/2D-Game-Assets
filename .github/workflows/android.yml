@@ -13,16 +13,23 @@ jobs:
       - uses: actions/checkout@v4
       - name: Validate bundled resources
         run: python3 scripts/check_assets.py
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
-      - uses: android-actions/setup-android@v3
-      - name: Install Android SDK platform and build tools
-        run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
-      - uses: gradle/actions/setup-gradle@v4
+      - name: Check runner Android SDK
+        run: |
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          if ! command -v sdkmanager; then echo '::error::Android sdkmanager is missing from this runner'; exit 1; fi
+          sdkmanager 'platforms;android-35' 'build-tools;35.0.0' > sdk.log 2>&1 || { tail -20 sdk.log | while IFS= read -r line; do echo "::error::$line"; done; exit 1; }
       - name: Assemble the native app
-        run: ./gradlew --no-daemon :app:assembleDebug
+        run: |
+          if ! ./gradlew --no-daemon :app:assembleDebug > build.log 2>&1; then
+            grep -E 'error:|FAILURE:|What went wrong|Execution failed|Could not |failed|^\* ' build.log | tail -35 | while IFS= read -r line; do echo "::error::$line"; done
+            tail -45 build.log
+            exit 1
+          fi
+          tail -25 build.log
       - uses: actions/upload-artifact@v4
         with:
           name: 2D-WORLD-Engine-debug-APK
