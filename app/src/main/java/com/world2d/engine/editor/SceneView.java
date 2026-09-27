@@ -53,7 +53,7 @@ public final class SceneView extends View {
     private float originalX,originalY,originalAngle,originalScaleX,originalScaleY;
     private boolean moving,historyMade;
     private long previousNanos;
-    private float cursorX,cursorY;
+    private float cursorX,cursorY,previewTime=-1;
     public SceneView(Context context,AssetLibrary library) {
         super(context);this.library=library;density=getResources().getDisplayMetrics().density;
     }
@@ -73,6 +73,7 @@ public final class SceneView extends View {
     public void setPlacement(String id){placementId=id;invalidate();}
     public void setBrushAsset(String id){brushAssetId=id;}
     public void setThumbnail(boolean value){thumb=value;invalidate();}
+    public void setPreviewTime(float seconds){previewTime=seconds;invalidate();}
     public void setAlive(boolean value){alive=value;if(value)invalidate();}
     public float zoom(){return zoom;}
     public void resetView(){if(scene!=null){panX=scene.optInt("width")/2f;panY=scene.optInt("height")/2f;
@@ -136,7 +137,7 @@ public final class SceneView extends View {
         }
         canvas.restore();
         if(!thumb)drawOverlay(canvas,world,scale);
-        if(alive&&(runtime!=null||(!thumb&&hasAnimation(world))))postInvalidateDelayed(16);
+        if(alive&&(runtime!=null||(!thumb&&previewTime<0&&hasAnimation(world))))postInvalidateDelayed(16);
     }
     private void drawGrid(Canvas canvas,int w,int h,float scale){
         int spacing=gridSize*(scale<0.4?4:1);
@@ -201,6 +202,9 @@ public final class SceneView extends View {
         JSONArray frames=animation.optJSONArray("frames");if(frames==null||frames.length()==0)return null;
         float duration=(float)Math.max(0.01,animation.optDouble("duration",1));
         float t=animation.optString("loop").equals("once")?Math.min(time,duration):time%duration;
+        if(animation.optString("loop").equals("pingpong")){
+            float phase=time%(duration*2);t=phase>duration?duration*2-phase:phase;
+        }
         String chosen=J.at(frames,0).optString("assetId");
         for(int i=0;i<frames.length();i++)if(t>=J.at(frames,i).optDouble("time"))chosen=J.at(frames,i).optString("assetId");
         return chosen;
@@ -209,7 +213,8 @@ public final class SceneView extends View {
         Matrix matrix=nodeMatrix(world,node,new HashSet<>());
         canvas.save();canvas.concat(matrix);
         JSONObject t=J.obj(node,"transform"),anim=animation(node);
-        float seconds=runtime!=null?runtime.elapsed:System.currentTimeMillis()/1000f;
+        float seconds=runtime!=null?runtime.elapsed:
+            (previewTime>=0?previewTime:System.currentTimeMillis()/1000f);
         JSONObject assignment=GameProject.component(node,"animation");
         seconds*=assignment==null?1:assignment.optDouble("speed",1);
         if(anim!=null){canvas.translate((float)sample(anim,"x",seconds,0),(float)sample(anim,"y",seconds,0));

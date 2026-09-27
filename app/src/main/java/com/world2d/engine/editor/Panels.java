@@ -26,6 +26,7 @@ import android.widget.HorizontalScrollView;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
+import android.widget.SeekBar;
 import android.widget.Spinner;
 import android.widget.TextView;
 import com.world2d.engine.assets.AssetLibrary;
@@ -574,6 +575,25 @@ public final class Panels {
         loop.setSelection(Arrays.asList(modes).indexOf(clip.optString("loop","loop"))<0?0:
             Arrays.asList(modes).indexOf(clip.optString("loop","loop")));Ui.add(form,loop,-1,47);
         gap(form,10);
+        Ui.add(form,Ui.text(a,"SCRUB PREVIEW",12,Ui.GREEN,true),-1,28);
+        TextView position=Ui.text(a,"0.00s / "+clip.optDouble("duration",1)+"s",12,Ui.MUTED,false);
+        Ui.add(form,position,-1,27);
+        SeekBar scrub=new SeekBar(a);scrub.setMax(1000);
+        scrub.setProgressTintList(android.content.res.ColorStateList.valueOf(Ui.GREEN));
+        scrub.setThumbTintList(android.content.res.ColorStateList.valueOf(Ui.GREEN));
+        scrub.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){
+            public void onStartTrackingTouch(SeekBar bar){}
+            public void onStopTrackingTouch(SeekBar bar){}
+            public void onProgressChanged(SeekBar bar,int progress,boolean fromUser){
+                float t=(float)(clip.optDouble("duration",1)*progress/1000f);
+                position.setText(String.format(java.util.Locale.ROOT,"%.2fs / %.2fs",t,clip.optDouble("duration",1)));
+                if(a.viewport!=null)a.viewport.setPreviewTime(t);
+            }
+        });
+        Ui.add(form,scrub,-1,43);
+        button(form,"▶  Resume live animation",false,()->{
+            if(a.viewport!=null)a.viewport.setPreviewTime(-1);
+        });gap(form,10);
         button(form,"Apply clip settings",true,()->{
             try{double seconds=Double.parseDouble(duration.getText().toString());int frameRate=Integer.parseInt(fps.getText().toString());
                 if(seconds<=0||seconds>120||frameRate<1||frameRate>120)throw new NumberFormatException();
@@ -615,7 +635,15 @@ public final class Panels {
         JSONArray frames=J.arr(clip,"frames");
         for(int i=0;i<frames.length();i++){
             JSONObject frame=J.at(frames,i);AssetLibrary.Entry asset=a.library.get(a.project,frame.optString("assetId"));
-            Ui.add(form,Ui.text(a,String.format("%.2fs  ·  %s",frame.optDouble("time"),asset==null?"missing frame":asset.name),11,Ui.MUTED,false),-1,29);
+            LinearLayout row=Ui.horizontal(a);
+            TextView label=Ui.text(a,String.format(java.util.Locale.ROOT,"%.2fs  ·  %s",frame.optDouble("time"),
+                asset==null?"missing frame":asset.name),11,Ui.MUTED,false);
+            row.addView(label,new LinearLayout.LayoutParams(0,Ui.dp(a,39),1));
+            TextView edit=Ui.subtleButton(a,"Edit");Ui.add(row,edit,54,39);
+            edit.setOnClickListener(v->frameTimeDialog(a,clip,frames,frame));
+            TextView remove=Ui.subtleButton(a,"×");Ui.add(row,remove,38,39);
+            remove.setOnClickListener(v->a.edit(()->removeObject(frames,frame)));
+            Ui.add(form,row,-1,39);
         }
         button(form,"＋ Add sprite frame",false,()->{
             List<AssetLibrary.Entry> images=new ArrayList<>();for(AssetLibrary.Entry item:a.library.all(a.project))
@@ -627,7 +655,9 @@ public final class Panels {
                     new AlertDialog.Builder(a).setTitle("Frame time").setView(at)
                         .setPositiveButton("Add frame",(dialog,which)->{
                             try{double time=Double.parseDouble(at.getText().toString());
-                                a.edit(()->frames.put(J.o("time",time,"assetId",images.get(index).id)));
+                                if(time<0||time>clip.optDouble("duration",1))throw new NumberFormatException();
+                                a.edit(()->{frames.put(J.o("time",time,"assetId",images.get(index).id));
+                                    sortTimed(frames);});
                             }catch(Exception ex){a.notify("Invalid frame time.");}
                         }).show();
                 }).show();
@@ -635,21 +665,60 @@ public final class Panels {
         JSONArray events=J.arr(clip,"events");
         Ui.add(form,Ui.text(a,"TIMELINE EVENTS",12,Ui.GREEN,true),-1,29);
         for(int i=0;i<events.length();i++){
-            JSONObject event=J.at(events,i);
-            Ui.add(form,Ui.text(a,event.optDouble("time")+"s  ·  "+event.optString("action"),11,Ui.MUTED,false),-1,28);
+            JSONObject event=J.at(events,i);LinearLayout row=Ui.horizontal(a);
+            TextView label=Ui.text(a,event.optDouble("time")+"s  ·  "+event.optString("action"),11,Ui.MUTED,false);
+            row.addView(label,new LinearLayout.LayoutParams(0,Ui.dp(a,39),1));
+            TextView edit=Ui.subtleButton(a,"Edit");Ui.add(row,edit,54,39);
+            edit.setOnClickListener(v->eventDialog(a,clip,events,event));
+            TextView remove=Ui.subtleButton(a,"×");Ui.add(row,remove,38,39);
+            remove.setOnClickListener(v->a.edit(()->removeObject(events,event)));
+            Ui.add(form,row,-1,39);
         }
-        button(form,"＋ Add audio / particle event",false,()->{
-            LinearLayout values=Ui.vertical(a);Ui.pad(values,a,14,8,14,8);
-            EditText time=Ui.field(a,"Time (s)","0.5",true),action=Ui.field(a,"sound coin or emit Sparkles","sound coin",false);
-            Ui.add(values,time,-1,50);gap(values,6);Ui.add(values,action,-1,50);
-            new AlertDialog.Builder(a).setTitle("Timeline event").setView(values)
-                .setPositiveButton("Add",(d,index)->{try{double t=Double.parseDouble(time.getText().toString());
-                    a.edit(()->events.put(J.o("time",t,"action",action.getText().toString())));
-                }catch(Exception ex){a.notify("Invalid time.");}}).show();
-        });
+        button(form,"＋ Add audio / particle / message event",false,()->eventDialog(a,clip,events,null));
         ScrollView scroll=new ScrollView(a);scroll.addView(form);
-        Dialog dialog=new Dialog(a);dialog.setContentView(scroll);dialog.setTitle("Animation · "+clip.optString("name"));dialog.show();
-        if(dialog.getWindow()!=null)dialog.getWindow().setLayout(-1,(int)(a.getResources().getDisplayMetrics().heightPixels*0.85f));
+        Dialog dialog=new Dialog(a);dialog.setContentView(scroll);dialog.setTitle("Animation · "+clip.optString("name"));
+        dialog.setOnDismissListener(v->{if(a.viewport!=null)a.viewport.setPreviewTime(-1);});
+        dialog.show();
+        if(dialog.getWindow()!=null){dialog.getWindow().setGravity(Gravity.BOTTOM);
+            dialog.getWindow().setLayout(-1,(int)(a.getResources().getDisplayMetrics().heightPixels*0.67f));}
+    }
+    private static void removeObject(JSONArray entries,JSONObject value){
+        for(int i=entries.length()-1;i>=0;i--)if(J.at(entries,i)==value)entries.remove(i);
+    }
+    private static void eventDialog(MainActivity a,JSONObject clip,JSONArray events,JSONObject current){
+        LinearLayout values=Ui.vertical(a);Ui.pad(values,a,14,8,14,8);
+        EditText time=Ui.field(a,"Time (s)",current==null?"0.5":String.valueOf(current.optDouble("time")),true);
+        EditText action=Ui.field(a,"sound coin or emit Sparkles",
+            current==null?"sound coin":current.optString("action"),false);
+        Ui.add(values,time,-1,50);gap(values,6);Ui.add(values,action,-1,50);
+        new AlertDialog.Builder(a).setTitle("Timeline event").setView(values)
+            .setPositiveButton("Save",(d,index)->{try{
+                double at=Double.parseDouble(time.getText().toString());
+                String effect=action.getText().toString().trim();
+                if(at<0||at>clip.optDouble("duration",1)||
+                    !(effect.startsWith("sound ")||effect.startsWith("emit ")||effect.startsWith("message ")))
+                    throw new IllegalArgumentException();
+                a.edit(()->{JSONObject event=current==null?J.o("time",at,"action",effect):current;
+                    J.put(event,"time",at);J.put(event,"action",effect);
+                    if(current==null)events.put(event);sortTimed(events);
+                });
+            }catch(Exception ex){a.notify("Enter a time in the clip and an action: sound, emit or message.");}}).show();
+    }
+    private static void frameTimeDialog(MainActivity a,JSONObject clip,JSONArray frames,JSONObject frame){
+        EditText time=Ui.field(a,"Time (s)",String.valueOf(frame.optDouble("time")),true);
+        new AlertDialog.Builder(a).setTitle("Sprite frame time").setView(time)
+            .setPositiveButton("Save",(d,index)->{try{
+                double at=Double.parseDouble(time.getText().toString());
+                if(at<0||at>clip.optDouble("duration",1))throw new NumberFormatException();
+                a.edit(()->{J.put(frame,"time",at);sortTimed(frames);});
+            }catch(Exception ex){a.notify("Frame time must fit the animation duration.");}}).show();
+    }
+    private static void sortTimed(JSONArray entries){
+        List<JSONObject> ordered=new ArrayList<>();
+        for(int i=0;i<entries.length();i++)ordered.add(J.at(entries,i));
+        ordered.sort((left,right)->Double.compare(left.optDouble("time"),right.optDouble("time")));
+        while(entries.length()>0)entries.remove(entries.length()-1);
+        for(JSONObject entry:ordered)entries.put(entry);
     }
     private static void keyframeDialog(MainActivity a,JSONObject clip,JSONObject track,JSONObject key){
         LinearLayout values=Ui.vertical(a);Ui.pad(values,a,18,10,18,10);
@@ -663,7 +732,8 @@ public final class Panels {
                     if(t<0||t>clip.optDouble("duration"))throw new NumberFormatException();
                     a.edit(()->{JSONObject target=key==null?J.o("time",t,"value",v):key;
                         J.put(target,"time",t);J.put(target,"value",v);
-                        if(key==null)J.arr(track,"keys").put(target);});
+                        JSONArray all=J.arr(track,"keys");if(key==null)all.put(target);
+                        sortTimed(all);});
                 }catch(Exception ex){a.notify("Time must fit the animation duration.");}
             }).setNegativeButton("Cancel",null).show();
     }

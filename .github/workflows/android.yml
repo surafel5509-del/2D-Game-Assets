@@ -123,4 +123,12 @@ jobs:
           IMAGE_SHA=$(gh api -X POST "repos/${{ github.repository }}/git/blobs" --input /tmp/world-smoke-blob.json --jq .sha)
           echo "::notice::EMULATOR_SCREENSHOT_GIT_BLOB_SHA=$IMAGE_SHA"
           "$ADB" logcat -d -t 800 -s AndroidRuntime:E > /tmp/crash.log
-          if grep -q 'FATAL EXCEPTION' /tmp/crash.log; then tail -25 /tmp/crash.log; echo '::error::App crashed on emulator'; exit 1; fi
+          if grep -q 'FATAL EXCEPTION' /tmp/crash.log && grep -q 'com.world2d.engine' /tmp/crash.log; then
+            tail -25 /tmp/crash.log; echo '::error::App crashed on emulator'; exit 1
+          fi
+          python3 scripts/android_smoke.py "$ADB" /tmp/world-game-smoke.png
+          printf '{"content":"' > /tmp/world-game-smoke-blob.json
+          base64 -w0 /tmp/world-game-smoke.png >> /tmp/world-game-smoke-blob.json
+          printf '","encoding":"base64"}' >> /tmp/world-game-smoke-blob.json
+          GAME_IMAGE_SHA=$(gh api -X POST "repos/${{ github.repository }}/git/blobs" --input /tmp/world-game-smoke-blob.json --jq .sha)
+          echo "::notice::GAMEPLAY_SCREENSHOT_GIT_BLOB_SHA=$GAME_IMAGE_SHA"

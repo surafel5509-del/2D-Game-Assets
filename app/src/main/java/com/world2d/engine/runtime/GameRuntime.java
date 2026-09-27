@@ -481,12 +481,18 @@ public final class GameRuntime {
             JSONArray events=clip.optJSONArray("events");if(events==null||events.length()==0)continue;
             double duration=Math.max(0.01,clip.optDouble("duration",1));
             double speed=Math.max(0,assignment.optDouble("speed",1));
+            String loop=clip.optString("loop","loop");
+            double period=loop.equals("pingpong")?duration*2:duration;
             double now=elapsed*speed,previous=(elapsed-dt)*speed;
-            if(clip.optString("loop").equals("once")){now=Math.min(duration,now);previous=Math.min(duration,previous);}
-            else{now%=duration;previous%=duration;}
+            if(loop.equals("once")){now=Math.min(duration,now);previous=Math.min(duration,previous);}
+            else{now%=period;previous%=period;}
             for(int e=0;e<events.length();e++){
                 JSONObject event=J.at(events,e);double at=event.optDouble("time",0);
-                boolean crossed=now>=previous?at>previous&&at<=now:at>previous||at<=now;
+                if(at<0||at>duration)continue;
+                boolean crossed=eventCrossed(at,previous,now) ||
+                    (loop.equals("pingpong")&&at>0&&at<duration&&
+                     eventCrossed(period-at,previous,now)) ||
+                    (at==0&&elapsed<=dt*1.1f);
                 if(!crossed)continue;
                 String action=event.optString("action","").trim();
                 if(action.startsWith("sound "))sound(action.substring(6).trim());
@@ -494,6 +500,9 @@ public final class GameRuntime {
                 else if(action.startsWith("message ")){message=action.substring(8).trim();messageTime=elapsed;changed();}
             }
         }
+    }
+    private boolean eventCrossed(double event,double previous,double now){
+        return now>=previous?event>previous&&event<=now:event>previous||event<=now;
     }
     private void onContact(JSONObject a,JSONObject b) {
         JSONObject hero=GameProject.tagged(a,"player")?a:GameProject.tagged(b,"player")?b:null;
