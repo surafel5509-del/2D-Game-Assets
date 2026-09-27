@@ -1,0 +1,3 @@
+Kenney Pixel Platformer by Kenney (kenney.nl): Creative Commons Zero (CC0).
+2D WORLD Engine procedural vector art and synthesized sound effects: original work, CC0.
+Imported user assets retain their own licenses.

@@ -1,0 +1,11 @@
+node_modules/
+.gradle/
+**/build/
+*.apk
+*.aab
+*.iml
+.idea/
+.DS_Store
+tools/generated-sfx/
+*.log
+local.properties

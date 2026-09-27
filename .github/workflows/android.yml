@@ -1,0 +1,30 @@
+name: Android editor APK
+on:
+  push:
+    branches: ["arena/01a0e402-2d-game-assets"]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate bundled resources
+        run: python3 scripts/check_assets.py
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - name: Install Android SDK platform and build tools
+        run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Assemble the native app
+        run: ./gradlew --no-daemon :app:assembleDebug
+      - uses: actions/upload-artifact@v4
+        with:
+          name: 2D-WORLD-Engine-debug-APK
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error

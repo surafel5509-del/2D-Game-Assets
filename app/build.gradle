@@ -1,0 +1,50 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.world2d.engine'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'com.world2d.engine'
+        minSdk 26
+        targetSdk 35
+        versionCode 1
+        versionName '0.1.0'
+        testInstrumentationRunner 'android.test.InstrumentationTestRunner'
+    }
+
+    buildTypes {
+        release { minifyEnabled false }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    testOptions { unitTests.returnDefaultValues = true }
+}
+
+def runtimeSources = [
+    'data/J.java', 'data/GameProject.java', 'data/ProjectStore.java',
+    'assets/AssetLibrary.java', 'runtime/ScriptVM.java', 'runtime/GameRuntime.java',
+    'editor/SceneView.java', 'export/GameActivity.java'
+]
+def runtimeAssets = layout.buildDirectory.dir('generated/game-runtime-assets')
+tasks.register('syncGameRuntime', Copy) {
+    from('src/main/java/com/world2d/engine') {
+        runtimeSources.each { include it }
+        into 'export-runtime/com/world2d/engine'
+    }
+    from(rootProject.file('gradle/wrapper/gradle-wrapper.jar')) {
+        into 'export-runtime'
+    }
+    into runtimeAssets
+}
+android.sourceSets.main.assets.srcDirs += runtimeAssets.get().asFile
+tasks.configureEach { task ->
+    if (task.name.startsWith('merge') && task.name.endsWith('Assets')) {
+        task.dependsOn('syncGameRuntime')
+    }
+}
