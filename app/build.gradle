@@ -12,7 +12,7 @@ android {
         targetSdk 35
         versionCode 1
         versionName '0.1.0'
-        testInstrumentationRunner 'android.test.InstrumentationTestRunner'
+        testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
     }
 
     buildTypes {
@@ -47,4 +47,10 @@ tasks.configureEach { task ->
     if (task.name.startsWith('merge') && task.name.endsWith('Assets')) {
         task.dependsOn('syncGameRuntime')
     }
+}
+
+// Test runner is packaged only into the separate androidTest APK, never the editor APK.
+dependencies {
+    androidTestImplementation 'androidx.test:runner:1.6.2'
+    androidTestImplementation 'androidx.test.ext:junit:1.2.1'
 }
