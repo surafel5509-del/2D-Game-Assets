@@ -37,11 +37,6 @@ tasks.register('syncGameRuntime', Copy) {
         runtimeSources.each { include it }
         into 'export-runtime/com/world2d/engine'
     }
-    from(rootProject.file('gradle/wrapper/gradle-wrapper.jar')) {
-        // AAPT excludes *.jar from Android assets; store bytes under a neutral name.
-        into 'export-runtime'
-        rename { 'gradle-wrapper.data' }
-    }
     into runtimeAssets
 }
 android.sourceSets.main.assets.srcDirs += runtimeAssets.get().asFile

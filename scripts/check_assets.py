@@ -4,6 +4,8 @@ from pathlib import Path
 from collections import Counter
 import re
 import sys
+import base64
+import hashlib
 import zipfile
 root = Path('app/src/main/assets')
 catalog = json.loads((root / 'library/catalog.json').read_text())
@@ -35,11 +37,15 @@ print(f'Validated {len(catalog)} resources, {parts} modular parts, {counts["Audi
 if len(sys.argv) == 3 and sys.argv[1] == '--apk':
     with zipfile.ZipFile(sys.argv[2]) as apk:
         packaged = set(apk.namelist())
+        encoded = apk.read('assets/export-runtime/wrapper_payload.txt')
+        wrapper = base64.b64decode(encoded)
+        reference = Path('gradle/wrapper/gradle-wrapper.jar').read_bytes()
+        assert hashlib.sha256(wrapper).digest() == hashlib.sha256(reference).digest(), 'APK wrapper bytes are invalid'
     required = {f"assets/{item['path']}" for item in catalog}
     required.update(f"assets/{part['path']}" for item in catalog for part in item['parts'])
     required.update({
         'assets/library/catalog.json',
-        'assets/export-runtime/gradle-wrapper.data',
+        'assets/export-runtime/wrapper_payload.txt',
         'assets/export-runtime/com/world2d/engine/runtime/GameRuntime.java',
         'assets/export-runtime/com/world2d/engine/export/GameActivity.java',
     })
