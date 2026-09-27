@@ -4,7 +4,7 @@ on:
     branches: ["arena/01a0e402-2d-game-assets"]
   workflow_dispatch:
 permissions:
-  contents: read
+  contents: write
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -37,6 +37,16 @@ jobs:
             exit 1
           fi
           tail -25 build.log
+      - name: Save APK as a retrievable Git object
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          printf '{"content":"' > /tmp/world-apk-blob.json
+          base64 -w0 app/build/outputs/apk/debug/app-debug.apk >> /tmp/world-apk-blob.json
+          printf '","encoding":"base64"}' >> /tmp/world-apk-blob.json
+          SHA=$(gh api -X POST "repos/${{ github.repository }}/git/blobs" --input /tmp/world-apk-blob.json --jq .sha)
+          echo "::notice::APK_GIT_BLOB_SHA=$SHA"
       - uses: actions/upload-artifact@v4
         with:
           name: 2D-WORLD-Engine-debug-APK

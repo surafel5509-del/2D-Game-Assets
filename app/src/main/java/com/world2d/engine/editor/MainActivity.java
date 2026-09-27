@@ -610,27 +610,46 @@ public final class MainActivity extends Activity implements SceneView.Events {
             if(code==OPEN_PROJECT){GameProject imported;
                 String name=uri.getLastPathSegment();
                 if(name!=null&&name.endsWith(".json")){
-                    byte[] buffer=new byte[12*1024*1024];int n;
-                    try(java.io.InputStream in=getContentResolver().openInputStream(uri)){n=in.read(buffer);}
-                    JSONObject json=new JSONObject(new String(buffer,0,Math.max(0,n),java.nio.charset.StandardCharsets.UTF_8));
+                    java.io.ByteArrayOutputStream bytes=new java.io.ByteArrayOutputStream();
+                    try(java.io.InputStream in=getContentResolver().openInputStream(uri)){
+                        if(in==null)throw new java.io.IOException("Cannot open project JSON.");
+                        byte[] chunk=new byte[8192];int read;
+                        while((read=in.read(chunk))!=-1){bytes.write(chunk,0,read);
+                            if(bytes.size()>12*1024*1024)throw new java.io.IOException("Project JSON exceeds 12 MB limit.");}
+                    }
+                    JSONObject json=new JSONObject(bytes.toString("UTF-8"));
                     GameProject.validate(json);imported=new GameProject(json);
                     J.put(imported.data,"id",J.id("project"));J.put(imported.data,"name",imported.name()+" (imported)");
                     store.save(imported,false);
                 }else try(java.io.InputStream in=getContentResolver().openInputStream(uri)){imported=store.importZip(in);}
                 openEditor(imported,null);notify("Project imported");
             }else if(code==OPEN_ASSET&&project!=null){
-                JSONObject asset=store.importAsset(project,uri);markChanged(true);
+                remember();JSONObject asset=store.importAsset(project,uri);markChanged(true);
                 notify("Imported "+asset.optString("name"));
             }else if(code==OPEN_SHEET&&project!=null)Panels.sliceSheet(this,uri);
-            else if(code==SAVE_PROJECT&&project!=null){
-                try(java.io.OutputStream out=getContentResolver().openOutputStream(uri)){store.exportZip(project,out);}
-                notify("Project exported");
-            }else if(code==EXPORT_ANDROID&&project!=null){
-                try(java.io.OutputStream out=getContentResolver().openOutputStream(uri)){
-                    new AndroidGameExporter(this,store,library).write(project,out);
-                }notify("Android Studio project exported. Open it on a machine with the Android SDK to compile an APK.");
+            else if((code==SAVE_PROJECT||code==EXPORT_ANDROID)&&project!=null){
+                exportAsync(uri,code==EXPORT_ANDROID);
             }
         }catch(Exception ex){notify("Operation failed: "+ex.getMessage());}
+    }
+    private void exportAsync(Uri destination,boolean android){
+        GameProject snapshot=project.snapshot();
+        android.widget.ProgressBar indicator=new android.widget.ProgressBar(this);
+        indicator.setIndeterminate(true);Ui.pad(indicator,this,35,24,35,24);
+        AlertDialog progress=new AlertDialog.Builder(this)
+            .setTitle(android?"Packaging native Android project":"Exporting project")
+            .setMessage(android?"Copying your actual scenes, imported files and native runtime…":"Writing project JSON and assets…")
+            .setView(indicator).setCancelable(false).create();
+        progress.show();
+        new Thread(()->{
+            try(java.io.OutputStream output=getContentResolver().openOutputStream(destination)){
+                if(output==null)throw new java.io.IOException("Cannot open export destination.");
+                if(android)new AndroidGameExporter(this,store,library).write(snapshot,output);
+                else store.exportZip(snapshot,output);
+                runOnUiThread(()->{progress.dismiss();notify(android?
+                    "Android Studio game project exported. Build its APK using the Android SDK.":"Project exported successfully.");});
+            }catch(Exception ex){runOnUiThread(()->{progress.dismiss();notify("Export failed: "+ex.getMessage());});}
+        },"2D-WORLD-export").start();
     }
     public void globalSearch(){if(project==null)return;
         EditText query=Ui.field(this,"Search scenes, objects, scripts and assets","",false);
@@ -733,13 +752,23 @@ public final class MainActivity extends Activity implements SceneView.Events {
         super.onBackPressed();
     }
     private String keyAction(int keyCode){
-        if(keyCode==KeyEvent.KEYCODE_DPAD_LEFT||keyCode==KeyEvent.KEYCODE_A)return "left";
-        if(keyCode==KeyEvent.KEYCODE_DPAD_RIGHT||keyCode==KeyEvent.KEYCODE_D)return "right";
-        if(keyCode==KeyEvent.KEYCODE_DPAD_UP||keyCode==KeyEvent.KEYCODE_W)return "up";
-        if(keyCode==KeyEvent.KEYCODE_DPAD_DOWN||keyCode==KeyEvent.KEYCODE_S)return "down";
-        if(keyCode==KeyEvent.KEYCODE_SPACE)return "jump";
-        if(keyCode==KeyEvent.KEYCODE_J||keyCode==KeyEvent.KEYCODE_ENTER)return "fire";
-        if(keyCode==KeyEvent.KEYCODE_E)return "interact";
+        String code="";
+        if(keyCode>=KeyEvent.KEYCODE_A&&keyCode<=KeyEvent.KEYCODE_Z)
+            code="Key"+(char)('A'+keyCode-KeyEvent.KEYCODE_A);
+        else if(keyCode==KeyEvent.KEYCODE_DPAD_LEFT)code="ArrowLeft";
+        else if(keyCode==KeyEvent.KEYCODE_DPAD_RIGHT)code="ArrowRight";
+        else if(keyCode==KeyEvent.KEYCODE_DPAD_UP)code="ArrowUp";
+        else if(keyCode==KeyEvent.KEYCODE_DPAD_DOWN)code="ArrowDown";
+        else if(keyCode==KeyEvent.KEYCODE_SPACE||keyCode==KeyEvent.KEYCODE_BUTTON_A)code="Space";
+        else if(keyCode==KeyEvent.KEYCODE_ENTER||keyCode==KeyEvent.KEYCODE_BUTTON_R1)code="Enter";
+        else if(keyCode==KeyEvent.KEYCODE_ESCAPE)code="Escape";
+        if(project==null||code.isEmpty())return "";
+        JSONObject mapping=J.obj(project.data,"input");
+        for(java.util.Iterator<String> names=mapping.keys();names.hasNext();){
+            String action=names.next();JSONArray codes=mapping.optJSONArray(action);
+            if(codes!=null)for(int i=0;i<codes.length();i++)
+                if(code.equals(codes.optString(i)))return action;
+        }
         return "";
     }
     @Override public boolean onKeyDown(int keyCode,KeyEvent event){
@@ -750,6 +779,7 @@ public final class MainActivity extends Activity implements SceneView.Events {
             if(keyCode==KeyEvent.KEYCODE_K){globalSearch();return true;}
         }
         if(viewport!=null&&viewport.runtime()!=null){String action=keyAction(keyCode);
+            if(action.equals("pause")){viewport.runtime().paused=!viewport.runtime().paused;viewport.invalidate();return true;}
             if(!action.isEmpty()){viewport.runtime().setAction(action,true);return true;}
             if(keyCode==KeyEvent.KEYCODE_ESCAPE){viewport.runtime().paused=!viewport.runtime().paused;return true;}
         }

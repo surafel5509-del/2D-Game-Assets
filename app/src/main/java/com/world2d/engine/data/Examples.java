@@ -253,7 +253,7 @@ public final class Examples {
         floor(ruins, "builtin:texture-80");
         for (int i = 0; i < 7; i++) art(ruins, "Ancient pillar", "builtin:prop-3", 58 + i * 145, i % 2 == 0 ? 116 : 460, 60, 75, 0);
         label(ruins, "ECHOING RUINS", 480, 50, 23, "#ede6f8");
-        player(p, ruins, 110, 300, "topdown", "builtin:player-8");
+        GameProject.tag(player(p, ruins, 110, 300, "topdown", "builtin:player-8"), "can-shoot");
         JSONObject guardian = enemy(p, ruins, 612, 280, 17, false);
         J.put(guardian, "name", "Ruins guardian"); J.put(J.obj(guardian, "metadata"), "hp", 3);
         GameProject.addComponent(guardian, J.o("type", "particles", "preset", "Magic", "rate", 12,
@@ -261,7 +261,7 @@ public final class Examples {
             "size", 5, "color", "#c4a4ec", "emitting", true));
         JSONObject altar = art(ruins, "Restoration altar", "builtin:prop-23", 827, 289, 85, 85, 5);
         GameProject.addComponent(altar, GameProject.collider(80, 80, true));
-        scripted(p, altar, "Restore grove", "on_collision(player):\n  if inventory >= 1: scene \"Grove Restored\"");
+        scripted(p, altar, "Restore grove", "on_collision(player):\n  if score >= 1: scene \"Grove Restored\"\n  if score < 1: message \"Defeat the guardian first!\"");
         JSONObject ending = GameProject.newScene("Grove Restored", 960, 540, "#5c9288"); p.scenes().put(ending);
         floor(ending, "builtin:texture-1"); forest(ending);
         label(ending, "THE GROVE IS RESTORED", 480, 173, 35, "#e7ffdc");

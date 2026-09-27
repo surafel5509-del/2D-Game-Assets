@@ -239,6 +239,7 @@ public final class GameRuntime {
         if (actions.contains("fire")) shoot();
         for (int i=0;i<nodes.length();i++) ScriptVM.dispatch(this,J.at(nodes,i),"update",null,null,dt);
         updateAI(dt);
+        animationEvents(dt);
         Set<String> nextGround = new HashSet<>();
         for (int i=0;i<nodes.length();i++) {
             JSONObject node=J.at(nodes,i), body=GameProject.component(node,"body");
@@ -342,8 +343,9 @@ public final class GameRuntime {
         double bx=worldX(b)+cb.optDouble("offsetX"),by=worldY(b)+cb.optDouble("offsetY");
         if (ca.optString("shape").equals("circle") && cb.optString("shape").equals("circle"))
             return Math.hypot(ax-bx,ay-by)<ca.optDouble("radius",20)+cb.optDouble("radius",20);
-        return Math.abs(ax-bx)<(ca.optDouble("width")+cb.optDouble("width"))/2 &&
-            Math.abs(ay-by)<(ca.optDouble("height")+cb.optDouble("height"))/2;
+        JSONObject ta=J.obj(a,"transform"),tb=J.obj(b,"transform");
+        return Math.abs(ax-bx)<(ca.optDouble("width")*Math.abs(ta.optDouble("scaleX",1))+cb.optDouble("width")*Math.abs(tb.optDouble("scaleX",1)))/2 &&
+            Math.abs(ay-by)<(ca.optDouble("height")*Math.abs(ta.optDouble("scaleY",1))+cb.optDouble("height")*Math.abs(tb.optDouble("scaleY",1)))/2;
     }
     private void resolveStatic(JSONObject moving,boolean horizontal,Set<String> nextGround) {
         JSONObject collider=GameProject.component(moving,"collider"),body=GameProject.component(moving,"body");
@@ -356,14 +358,71 @@ public final class GameRuntime {
             if (shape==null || shape.optBoolean("sensor") || !overlaps(moving,solid)) continue;
             JSONObject t=J.obj(moving,"transform");
             double a=horizontal?worldX(moving):worldY(moving),b=horizontal?worldX(solid):worldY(solid);
-            double half=(horizontal?collider.optDouble("width")+shape.optDouble("width"):
-                collider.optDouble("height")+shape.optDouble("height"))/2;
+            double half=(horizontal?collider.optDouble("width")*Math.abs(J.obj(moving,"transform").optDouble("scaleX",1))+
+                shape.optDouble("width")*Math.abs(J.obj(solid,"transform").optDouble("scaleX",1)):
+                collider.optDouble("height")*Math.abs(J.obj(moving,"transform").optDouble("scaleY",1))+
+                shape.optDouble("height")*Math.abs(J.obj(solid,"transform").optDouble("scaleY",1)))/2;
             double overlap=half-Math.abs(a-b);
             if (overlap<=0) continue;
             String key=horizontal?"x":"y",speed=horizontal?"vx":"vy";
             if (!horizontal && a<b && body.optDouble("vy")>=0) nextGround.add(moving.optString("id"));
             J.put(t,key,t.optDouble(key)+(a<b?-1:1)*(overlap+0.02));
             J.put(body,speed,-body.optDouble(speed)*body.optDouble("bounce",0));
+        }
+        // TileMap collision: painted cells act as individual static boxes when enabled.
+        for(int i=0;i<nodes.length();i++){
+            JSONObject mapNode=J.at(nodes,i),map=GameProject.component(mapNode,"tilemap");
+            if(map==null||!map.optBoolean("collision")||!mapNode.optBoolean("visible",true))continue;
+            JSONObject cells=map.optJSONObject("cells");if(cells==null||cells.length()==0)continue;
+            int size=Math.max(4,map.optInt("tileSize",48)),cols=map.optInt("columns",20),rows=map.optInt("rows",12);
+            float startX=(float)(worldX(mapNode)-cols*size/2f),startY=(float)(worldY(mapNode)-rows*size/2f);
+            double ax=worldX(moving)+collider.optDouble("offsetX"),ay=worldY(moving)+collider.optDouble("offsetY");
+            double halfW=collider.optDouble("width")*Math.abs(J.obj(moving,"transform").optDouble("scaleX",1))/2;
+            double halfH=collider.optDouble("height")*Math.abs(J.obj(moving,"transform").optDouble("scaleY",1))/2;
+            int left=Math.max(0,(int)Math.floor((ax-halfW-startX)/size));
+            int right=Math.min(cols-1,(int)Math.floor((ax+halfW-startX)/size));
+            int top=Math.max(0,(int)Math.floor((ay-halfH-startY)/size));
+            int bottom=Math.min(rows-1,(int)Math.floor((ay+halfH-startY)/size));
+            for(int row=top;row<=bottom;row++)for(int col=left;col<=right;col++){
+                if(!cells.has(col+","+row))continue;
+                double bx=startX+(col+0.5)*size,by=startY+(row+0.5)*size;
+                if(Math.abs(ax-bx)>=halfW+size/2d||Math.abs(ay-by)>=halfH+size/2d)continue;
+                JSONObject t=J.obj(moving,"transform");
+                double delta=horizontal?ax-bx:ay-by;
+                double overlap=(horizontal?halfW:halfH)+size/2d-Math.abs(delta);
+                if(overlap<=0)continue;
+                if(!horizontal&&delta<0&&body.optDouble("vy")>=0)nextGround.add(moving.optString("id"));
+                String axis=horizontal?"x":"y",velocity=horizontal?"vx":"vy";
+                J.put(t,axis,t.optDouble(axis)+(delta<0?-1:1)*(overlap+0.02));
+                J.put(body,velocity,-body.optDouble(velocity)*body.optDouble("bounce",0));
+                ax=worldX(moving)+collider.optDouble("offsetX");
+                ay=worldY(moving)+collider.optDouble("offsetY");
+            }
+        }
+    }
+    private void animationEvents(float dt){
+        JSONArray nodes=GameProject.nodes(scene),clips=project.animations();
+        for(int i=0;i<nodes.length();i++){
+            JSONObject node=J.at(nodes,i),assignment=GameProject.component(node,"animation");
+            if(assignment==null||!assignment.optBoolean("autoplay",true))continue;
+            String id=assignment.optString("animationId");JSONObject clip=null;
+            for(int j=0;j<clips.length();j++)if(id.equals(J.at(clips,j).optString("id"))){clip=J.at(clips,j);break;}
+            if(clip==null)continue;
+            JSONArray events=clip.optJSONArray("events");if(events==null||events.length()==0)continue;
+            double duration=Math.max(0.01,clip.optDouble("duration",1));
+            double speed=Math.max(0,assignment.optDouble("speed",1));
+            double now=elapsed*speed,previous=(elapsed-dt)*speed;
+            if(clip.optString("loop").equals("once")){now=Math.min(duration,now);previous=Math.min(duration,previous);}
+            else{now%=duration;previous%=duration;}
+            for(int e=0;e<events.length();e++){
+                JSONObject event=J.at(events,e);double at=event.optDouble("time",0);
+                boolean crossed=now>=previous?at>previous&&at<=now:at>previous||at<=now;
+                if(!crossed)continue;
+                String action=event.optString("action","").trim();
+                if(action.startsWith("sound "))sound(action.substring(6).trim());
+                else if(action.startsWith("emit "))burst((float)worldX(node),(float)worldY(node),action.substring(5).trim());
+                else if(action.startsWith("message ")){message=action.substring(8).trim();messageTime=elapsed;changed();}
+            }
         }
     }
     private void onContact(JSONObject a,JSONObject b) {

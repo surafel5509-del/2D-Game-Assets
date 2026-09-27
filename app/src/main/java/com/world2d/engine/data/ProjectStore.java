@@ -51,7 +51,7 @@ public final class ProjectStore {
     public GameProject load(String id) throws IOException, JSONException {
         File file = new File(folder(id), "project.json");
         if (!file.isFile()) throw new IOException("Project file not found.");
-        byte[] bytes = readLimited(new FileInputStream(file), MAX_IMPORT_BYTES);
+        byte[] bytes = readLimited(new AtomicFile(file).openRead(), MAX_IMPORT_BYTES);
         JSONObject data = new JSONObject(new String(bytes, StandardCharsets.UTF_8));
         GameProject.validate(data);
         return new GameProject(data);
@@ -262,6 +262,25 @@ public final class ProjectStore {
                         if (id.equals(cells.optString(keys.next()))) { uses.add(scene.optString("name") + " / " + node.optString("name") + " (tilemap)"); break; }
                 }
             }
+        }
+        for(int p=0;p<project.prefabs().length();p++){
+            JSONObject prefab=J.at(project.prefabs(),p);
+            JSONArray prefabNodes=prefab.optJSONArray("nodes");
+            if(prefabNodes==null)continue;
+            for(int n=0;n<prefabNodes.length();n++){
+                JSONArray components=J.arr(J.at(prefabNodes,n),"components");
+                for(int c=0;c<components.length();c++)
+                    if(id.equals(J.at(components,c).optString("assetId")))
+                        uses.add("Prefab / "+prefab.optString("name"));
+            }
+        }
+        for(int a=0;a<project.animations().length();a++){
+            JSONObject animation=J.at(project.animations(),a);
+            JSONArray frames=animation.optJSONArray("frames");
+            if(frames==null)continue;
+            for(int f=0;f<frames.length();f++)
+                if(id.equals(J.at(frames,f).optString("assetId")))
+                    uses.add("Animation / "+animation.optString("name"));
         }
         return uses;
     }
