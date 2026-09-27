@@ -161,12 +161,47 @@ public final class GameProject {
         JSONArray scenes = data.optJSONArray("scenes"), assets = data.optJSONArray("assets");
         if (scenes == null || scenes.length() < 1 || scenes.length() > 40 || assets == null || assets.length() > 3000)
             throw new JSONException("Scenes or assets missing / exceed safety limits.");
+        Set<String> sceneIds = new HashSet<>();
         for (int i = 0; i < scenes.length(); i++) {
             JSONObject scene = scenes.optJSONObject(i);
             if (scene == null || scene.optInt("width") < 100 || scene.optInt("width") > 8192 ||
                 scene.optInt("height") < 100 || scene.optInt("height") > 8192 ||
-                scene.optJSONArray("nodes") == null || scene.optJSONArray("nodes").length() > 5000)
-                throw new JSONException("Invalid scene dimensions or node count.");
+                scene.optJSONArray("nodes") == null || scene.optJSONArray("nodes").length() > 5000 ||
+                scene.optString("id").isEmpty() || !sceneIds.add(scene.optString("id")))
+                throw new JSONException("Invalid scene dimensions, ID or node count.");
+            Set<String> nodeIds = new HashSet<>();
+            JSONArray nodes = scene.optJSONArray("nodes");
+            for(int n=0;n<nodes.length();n++){
+                JSONObject node=nodes.optJSONObject(n);
+                if(node==null||node.optString("id").isEmpty()||!nodeIds.add(node.optString("id")))
+                    throw new JSONException("A scene contains an invalid or repeated object ID.");
+            }
+        }
+        if(!sceneIds.contains(data.optString("startSceneId")))
+            throw new JSONException("The starting scene is missing.");
+        JSONArray scripts=data.optJSONArray("scripts"),clips=data.optJSONArray("animations"),prefabs=data.optJSONArray("prefabs");
+        if(scripts!=null){
+            if(scripts.length()>1000)throw new JSONException("Too many scripts.");
+            for(int i=0;i<scripts.length();i++)if(scripts.optJSONObject(i)==null||
+                    scripts.optJSONObject(i).optString("source").length()>50000)
+                throw new JSONException("Invalid or oversized script.");
+        }
+        if(clips!=null){
+            if(clips.length()>1000)throw new JSONException("Too many animations.");
+            for(int i=0;i<clips.length();i++){
+                JSONObject clip=clips.optJSONObject(i);
+                if(clip==null||(clip.optJSONArray("frames")!=null&&clip.optJSONArray("frames").length()>2000)||
+                    (clip.optJSONArray("tracks")!=null&&clip.optJSONArray("tracks").length()>64)||
+                    (clip.optJSONArray("events")!=null&&clip.optJSONArray("events").length()>2000))
+                    throw new JSONException("Invalid or oversized animation.");
+            }
+        }
+        if(prefabs!=null){
+            if(prefabs.length()>500)throw new JSONException("Too many prefabs.");
+            for(int i=0;i<prefabs.length();i++)if(prefabs.optJSONObject(i)==null||
+                    (prefabs.optJSONObject(i).optJSONArray("nodes")!=null&&
+                     prefabs.optJSONObject(i).optJSONArray("nodes").length()>5000))
+                throw new JSONException("Invalid or oversized prefab.");
         }
     }
 }

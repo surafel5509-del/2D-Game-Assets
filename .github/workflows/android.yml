@@ -74,7 +74,15 @@ jobs:
             exit 0
           fi
           echo '::notice::Emulator and Android 35 image installed; creating virtual device'
+          export ANDROID_AVD_HOME="$RUNNER_TEMP/world-avds"
+          mkdir -p "$ANDROID_AVD_HOME"
           printf 'no\n' | "$SDK/cmdline-tools/latest/bin/avdmanager" create avd -n world-smoke -k 'system-images;android-35;default;x86_64' --force > /tmp/avd.log 2>&1
+          if [ ! -f "$ANDROID_AVD_HOME/world-smoke.ini" ]; then
+            echo "::warning::AVD config missing from $ANDROID_AVD_HOME; emulator not launched"
+            cat /tmp/avd.log | tail -18 | while IFS= read -r line; do echo "::notice::$line"; done
+            find "$HOME/.android" "$ANDROID_AVD_HOME" -maxdepth 3 -name '*.ini' 2>/dev/null | while IFS= read -r line; do echo "::notice::Found AVD config: $line"; done
+            exit 0
+          fi
           "$SDK/emulator/emulator" -avd world-smoke -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -memory 2048 > /tmp/emulator.log 2>&1 &
           EMULATOR_PID=$!
           trap 'kill "$EMULATOR_PID" 2>/dev/null || true' EXIT

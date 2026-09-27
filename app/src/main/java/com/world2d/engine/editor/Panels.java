@@ -269,7 +269,7 @@ public final class Panels {
         try{
             String id=J.id("asset");
             String ext=entry.path.substring(entry.path.lastIndexOf('.')+1).toLowerCase(java.util.Locale.ROOT);
-            if(!ext.matches("png|jpg|webp|gif|wav|mp3|ogg"))throw new java.io.IOException("Unsupported source type.");
+            if(!ext.matches("png|jpg|webp|gif|wav|mp3|ogg|m4a|aac"))throw new java.io.IOException("Unsupported source type.");
             String src="assets/"+id+"."+ext;
             File dest=a.store.assetFile(a.project,src);
             if(dest==null)throw new java.io.IOException("Invalid destination.");

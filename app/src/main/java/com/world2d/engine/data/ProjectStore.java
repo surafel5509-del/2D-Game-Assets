@@ -3,6 +3,8 @@ package com.world2d.engine.data;
 import android.content.Context;
 import android.graphics.BitmapFactory;
 import android.net.Uri;
+import android.database.Cursor;
+import android.provider.OpenableColumns;
 import android.util.AtomicFile;
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -35,7 +37,7 @@ public final class ProjectStore {
     }
     public File folder(String id) { return new File(projects, id.replaceAll("[^a-zA-Z0-9_-]", "")); }
     public File assetFile(GameProject project, String src) {
-        if (src == null || !src.matches("assets/[a-zA-Z0-9_-]+\\.(png|jpg|webp|gif|wav|mp3|ogg)")) return null;
+        if (src == null || !src.matches("assets/[a-zA-Z0-9_-]+\\.(png|jpg|webp|gif|wav|mp3|ogg|m4a|aac)")) return null;
         return new File(folder(project.id()), src);
     }
     public List<GameProject> list() {
@@ -100,7 +102,7 @@ public final class ProjectStore {
     }
     public GameProject recover(String id) throws IOException, JSONException {
         File draft = new File(folder(id), "recovery.json");
-        JSONObject json = new JSONObject(new String(readLimited(new FileInputStream(draft), MAX_IMPORT_BYTES), StandardCharsets.UTF_8));
+        JSONObject json = new JSONObject(new String(readLimited(new AtomicFile(draft).openRead(), MAX_IMPORT_BYTES), StandardCharsets.UTF_8));
         GameProject.validate(json); return new GameProject(json);
     }
     public void discardRecovery(String id) { new File(folder(id), "recovery.json").delete(); }
@@ -142,18 +144,33 @@ public final class ProjectStore {
         save(clone, false); return clone;
     }
     public JSONObject importAsset(GameProject project, Uri uri) throws IOException {
-        String mime = context.getContentResolver().getType(uri);
-        if (mime == null) throw new IOException("File type not recognized. Use PNG, JPG, WEBP, GIF, WAV, MP3 or OGG.");
+        String label=uri.getLastPathSegment();
+        try(Cursor cursor=context.getContentResolver().query(uri,
+                new String[]{OpenableColumns.DISPLAY_NAME},null,null,null)){
+            if(cursor!=null&&cursor.moveToFirst())label=cursor.getString(0);
+        }catch(Exception ignored){ /* URI name remains available if provider rejects queries. */ }
+        if(label==null||label.length()>100)label="Imported asset";
+        if(label.contains("/"))label=label.substring(label.lastIndexOf('/')+1);
+        String mime=context.getContentResolver().getType(uri);
         String extension;
-        switch (mime) {
-            case "image/png": extension = "png"; break;
-            case "image/jpeg": extension = "jpg"; break;
-            case "image/webp": extension = "webp"; break;
-            case "image/gif": extension = "gif"; break;
-            case "audio/wav": case "audio/x-wav": extension = "wav"; break;
-            case "audio/mpeg": extension = "mp3"; break;
-            case "audio/ogg": extension = "ogg"; break;
-            default: throw new IOException("Unsupported file type: " + mime);
+        if(mime==null||mime.equals("application/octet-stream")){
+            int dot=label.lastIndexOf('.');
+            extension=dot<0?"":label.substring(dot+1).toLowerCase(java.util.Locale.ROOT);
+            if(extension.equals("jpeg"))extension="jpg";
+            if(!extension.matches("png|jpg|webp|gif|wav|mp3|ogg|m4a|aac"))
+                throw new IOException("File type not recognized. Use PNG, JPG, WEBP, GIF, WAV, MP3, OGG or M4A.");
+            mime=extension.matches("png|jpg|webp|gif")?"image/"+extension:"audio/"+extension;
+        }else switch(mime){
+            case "image/png":extension="png";break;
+            case "image/jpeg":extension="jpg";break;
+            case "image/webp":extension="webp";break;
+            case "image/gif":extension="gif";break;
+            case "audio/wav":case "audio/x-wav":case "audio/wave":extension="wav";break;
+            case "audio/mpeg":case "audio/mp3":extension="mp3";break;
+            case "audio/ogg":extension="ogg";break;
+            case "audio/mp4":case "audio/x-m4a":extension="m4a";break;
+            case "audio/aac":extension="aac";break;
+            default:throw new IOException("Unsupported file type: "+mime);
         }
         String id = J.id("asset"); String src = "assets/" + id + "." + extension;
         File target = assetFile(project, src);
@@ -174,9 +191,6 @@ public final class ProjectStore {
         if (image && (bounds.outWidth <= 0 || bounds.outWidth > 8192 || bounds.outHeight <= 0 || bounds.outHeight > 8192)) {
             target.delete(); throw new IOException("Image is corrupt or exceeds 8192 pixels per side.");
         }
-        String label = uri.getLastPathSegment();
-        if (label == null || label.length() > 100) label = "Imported " + (image ? "image" : "audio");
-        if (label.contains("/")) label = label.substring(label.lastIndexOf('/') + 1);
         JSONObject asset = J.o("id", id, "name", label, "kind", image ? "image" : "audio",
             "category", "Imported", "src", src, "width", Math.max(0, bounds.outWidth),
             "height", Math.max(0, bounds.outHeight), "tags", new JSONArray().put("imported"),
@@ -206,8 +220,15 @@ public final class ProjectStore {
             while ((item = zip.getNextEntry()) != null) {
                 if (++entries > 3000) throw new IOException("Too many archive entries.");
                 String name = item.getName();
-                if (item.isDirectory()) continue;
-                if (!name.equals("project.json") && !name.matches("assets/[a-zA-Z0-9_-]+\\.(png|jpg|webp|gif|wav|mp3|ogg)")) continue;
+                if (item.isDirectory()) { zip.closeEntry(); continue; }
+                if (!name.equals("project.json") && !name.matches("assets/[a-zA-Z0-9_-]+\\.(png|jpg|webp|gif|wav|mp3|ogg|m4a|aac)")) {
+                    // Still count ignored members so a ZIP bomb cannot bypass the 60 MB limit.
+                    total += transfer(zip, new OutputStream() {
+                        @Override public void write(int value) { }
+                        @Override public void write(byte[] bytes, int offset, int size) { }
+                    }, MAX_IMPORT_BYTES - total);
+                    zip.closeEntry(); continue;
+                }
                 ByteArrayOutputStream buffer = new ByteArrayOutputStream();
                 int size = transfer(zip, buffer, MAX_IMPORT_BYTES - total); total += size;
                 if (total > MAX_IMPORT_BYTES) throw new IOException("Expanded project exceeds 60 MB.");
@@ -269,9 +290,15 @@ public final class ProjectStore {
             if(prefabNodes==null)continue;
             for(int n=0;n<prefabNodes.length();n++){
                 JSONArray components=J.arr(J.at(prefabNodes,n),"components");
-                for(int c=0;c<components.length();c++)
-                    if(id.equals(J.at(components,c).optString("assetId")))
-                        uses.add("Prefab / "+prefab.optString("name"));
+                for(int c=0;c<components.length();c++){
+                    JSONObject part=J.at(components,c);
+                    if(id.equals(part.optString("assetId")))uses.add("Prefab / "+prefab.optString("name"));
+                    JSONObject cells=part.optJSONObject("cells");
+                    if(cells!=null)for(java.util.Iterator<String> keys=cells.keys();keys.hasNext();)
+                        if(id.equals(cells.optString(keys.next()))){
+                            uses.add("Prefab / "+prefab.optString("name")+" (tilemap)");break;
+                        }
+                }
             }
         }
         for(int a=0;a<project.animations().length();a++){
