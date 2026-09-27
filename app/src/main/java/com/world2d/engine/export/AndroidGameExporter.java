@@ -45,7 +45,7 @@ public final class AndroidGameExporter {
             text(zip,"gradle/wrapper/gradle-wrapper.properties","distributionUrl=https\\://services.gradle.org/distributions/gradle-8.9-bin.zip\n");
             text(zip,"gradlew","#!/bin/sh\nAPP_HOME=$(CDPATH= cd -- \"$(dirname -- \"$0\")\" && pwd)\n"+
                 "exec java -classpath \"$APP_HOME/gradle/wrapper/gradle-wrapper.jar\" org.gradle.wrapper.GradleWrapperMain \"$@\"\n");
-            asset(zip,"gradle/wrapper/gradle-wrapper.jar","export-runtime/gradle-wrapper.jar");
+            asset(zip,"gradle/wrapper/gradle-wrapper.jar","export-runtime/gradle-wrapper.data");
             String build="plugins { id 'com.android.application' }\nandroid {\n"+
                 "    namespace 'com.world2d.engine'\n    compileSdk 35\n    defaultConfig {\n"+
                 "        applicationId '"+appId+"'\n        minSdk 26\n        targetSdk 35\n        versionCode 1\n"+

@@ -229,16 +229,17 @@ public final class ProjectStore {
                     }, MAX_IMPORT_BYTES - total);
                     zip.closeEntry(); continue;
                 }
-                ByteArrayOutputStream buffer = new ByteArrayOutputStream();
-                int size = transfer(zip, buffer, MAX_IMPORT_BYTES - total); total += size;
-                if (total > MAX_IMPORT_BYTES) throw new IOException("Expanded project exceeds 60 MB.");
                 if (name.equals("project.json")) {
-                    if (size > 12 * 1024 * 1024) throw new IOException("Project data too large.");
+                    ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+                    total += transfer(zip, buffer, Math.min(12 * 1024 * 1024, MAX_IMPORT_BYTES - total));
                     json = new JSONObject(buffer.toString("UTF-8"));
                 } else {
+                    // Stream imported media to disk rather than holding a 60 MB file in RAM.
                     File target = new File(staging, name);
                     target.getParentFile().mkdirs();
-                    try (FileOutputStream out = new FileOutputStream(target)) { buffer.writeTo(out); }
+                    try (FileOutputStream out = new FileOutputStream(target)) {
+                        total += transfer(zip, out, MAX_IMPORT_BYTES - total);
+                    }
                 }
                 zip.closeEntry();
             }

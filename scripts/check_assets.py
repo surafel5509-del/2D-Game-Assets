@@ -3,6 +3,8 @@ import json
 from pathlib import Path
 from collections import Counter
 import re
+import sys
+import zipfile
 root = Path('app/src/main/assets')
 catalog = json.loads((root / 'library/catalog.json').read_text())
 assert len(catalog) >= 623, f'Expected 623 bundled resources, got {len(catalog)}'
@@ -29,3 +31,18 @@ for reference in re.findall(r'builtin:[a-z0-9-]+', example_source):
     if not reference.endswith('-'):
         assert reference in resource_ids, f'Example refers to missing resource: {reference}'
 print(f'Validated {len(catalog)} resources, {parts} modular parts, {counts["Audio"]} WAVs, 59 animations and 100 particle presets')
+
+if len(sys.argv) == 3 and sys.argv[1] == '--apk':
+    with zipfile.ZipFile(sys.argv[2]) as apk:
+        packaged = set(apk.namelist())
+    required = {f"assets/{item['path']}" for item in catalog}
+    required.update(f"assets/{part['path']}" for item in catalog for part in item['parts'])
+    required.update({
+        'assets/library/catalog.json',
+        'assets/export-runtime/gradle-wrapper.data',
+        'assets/export-runtime/com/world2d/engine/runtime/GameRuntime.java',
+        'assets/export-runtime/com/world2d/engine/export/GameActivity.java',
+    })
+    missing = sorted(required - packaged)
+    assert not missing, f'APK is missing {len(missing)} export/runtime resources: {missing[:10]}'
+    print(f'APK includes all {len(required)} required bundled resources and export sources')
