@@ -19,9 +19,16 @@ jobs:
           java-version: '17'
       - name: Check runner Android SDK
         run: |
-          echo "ANDROID_HOME=$ANDROID_HOME"
-          if ! command -v sdkmanager; then echo '::error::Android sdkmanager is missing from this runner'; exit 1; fi
-          sdkmanager 'platforms;android-35' 'build-tools;35.0.0' > sdk.log 2>&1 || { tail -20 sdk.log | while IFS= read -r line; do echo "::error::$line"; done; exit 1; }
+          echo "::notice::ANDROID_HOME=${ANDROID_HOME:-unset}; ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT:-unset}"
+          ls -la "${ANDROID_HOME:-/usr/local/lib/android/sdk}"/platforms "${ANDROID_HOME:-/usr/local/lib/android/sdk}"/build-tools "${ANDROID_HOME:-/usr/local/lib/android/sdk}"/cmdline-tools 2>&1 | head -35 | while IFS= read -r line; do echo "::notice::$line"; done
+          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          if [ -f "$SDK/platforms/android-35/android.jar" ] && [ -f "$SDK/build-tools/35.0.0/aapt2" ]; then
+            echo "::notice::Android Platform 35 and Build Tools 35 are preinstalled"
+          else
+            MANAGER="$SDK/cmdline-tools/latest/bin/sdkmanager"
+            if [ ! -f "$MANAGER" ]; then echo '::error::No Android SDK command-line tools on runner'; exit 1; fi
+            "$MANAGER" 'platforms;android-35' 'build-tools;35.0.0' > sdk.log 2>&1 || { tail -20 sdk.log | while IFS= read -r line; do echo "::error::$line"; done; exit 1; }
+          fi
       - name: Assemble the native app
         run: |
           if ! ./gradlew --no-daemon :app:assembleDebug > build.log 2>&1; then
