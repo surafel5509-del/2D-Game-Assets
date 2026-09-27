@@ -52,3 +52,10 @@ jobs:
           name: 2D-WORLD-Engine-debug-APK
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+      - name: Device-test prerequisites
+        if: always()
+        run: |
+          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          images=$(find "$SDK/system-images" -name system.img -print -quit 2>/dev/null || true)
+          emulator=$(find "$SDK/emulator" -name emulator -type f -print -quit 2>/dev/null || true)
+          echo "::notice::Emulator: ${emulator:-unavailable}; system image: ${images:-unavailable}; KVM: $(test -e /dev/kvm && echo yes || echo no)"

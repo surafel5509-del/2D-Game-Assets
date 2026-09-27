@@ -1,6 +1,7 @@
 package com.world2d.engine.runtime;
 
 import android.content.Context;
+import android.view.KeyEvent;
 import com.world2d.engine.assets.AssetLibrary;
 import com.world2d.engine.data.GameProject;
 import com.world2d.engine.data.J;
@@ -33,6 +34,7 @@ public final class GameRuntime {
     private Set<String> grounded = new HashSet<>();
     private Set<String> contacts = new HashSet<>();
     private final Map<String, Float> emission = new HashMap<>();
+    private final Map<String, Float> timers = new HashMap<>();
     private final AssetLibrary library;
     private final Context context;
     private String pendingScene;
@@ -60,16 +62,24 @@ public final class GameRuntime {
     public void open(String sceneName) {
         JSONObject target = project.scene(sceneName);
         if (target == null) { log("error", "Scene not found: " + sceneName); return; }
+        library.stopAmbient();
         scene = J.copy(target);
         cameraX = scene.optInt("width") / 2f; cameraY = scene.optInt("height") / 2f;
-        particles.clear(); contacts.clear(); grounded.clear(); emission.clear();
+        particles.clear(); contacts.clear(); grounded.clear(); emission.clear(); timers.clear();
         checkpoint = -1; message = "";
         log("info", "Scene ready: " + scene.optString("name"));
         JSONArray nodes = GameProject.nodes(scene);
         for (int i = 0; i < nodes.length(); i++) {
             JSONObject n = J.at(nodes, i); ScriptVM.dispatch(this, n, "start", null, null, 0);
             JSONObject audio = GameProject.component(n, "audio");
-            if (audio != null && audio.optBoolean("autoplay")) sound(audio.optString("assetId"));
+            if (audio != null && audio.optBoolean("autoplay")) {
+                try {
+                    if(audio.optBoolean("loop"))library.playAmbient(project,audio.optString("assetId"),
+                        (float)audio.optDouble("volume",0.8));
+                    else library.playEffect(project,audio.optString("assetId"),
+                        (float)audio.optDouble("volume",0.8));
+                }catch(Exception ex){log("warning","Audio unavailable: "+audio.optString("assetId"));}
+            }
         }
     }
     public void restart(String sceneId) {
@@ -87,6 +97,36 @@ public final class GameRuntime {
             if (id.equals(script.optString("id"))) return script;
         }
         return null;
+    }
+    public void setPaused(boolean pause){
+        paused=pause;
+        if(pause){actions.clear();previousActions.clear();library.pauseAmbient();}
+        else library.resumeAmbient();
+        changed();
+    }
+    public void stopAudio(){library.stopGameAudio();}
+    public void pauseAudio(){library.pauseAmbient();}
+    public void resumeAudio(){if(!paused)library.resumeAmbient();}
+    /** Resolve physical keyboard/gamepad keys against the project's editable input bindings. */
+    public String mapKey(int keyCode){
+        String code="";
+        if(keyCode>=KeyEvent.KEYCODE_A&&keyCode<=KeyEvent.KEYCODE_Z)
+            code="Key"+(char)('A'+keyCode-KeyEvent.KEYCODE_A);
+        else if(keyCode==KeyEvent.KEYCODE_DPAD_LEFT)code="ArrowLeft";
+        else if(keyCode==KeyEvent.KEYCODE_DPAD_RIGHT)code="ArrowRight";
+        else if(keyCode==KeyEvent.KEYCODE_DPAD_UP)code="ArrowUp";
+        else if(keyCode==KeyEvent.KEYCODE_DPAD_DOWN)code="ArrowDown";
+        else if(keyCode==KeyEvent.KEYCODE_SPACE||keyCode==KeyEvent.KEYCODE_BUTTON_A)code="Space";
+        else if(keyCode==KeyEvent.KEYCODE_ENTER||keyCode==KeyEvent.KEYCODE_BUTTON_R1)code="Enter";
+        else if(keyCode==KeyEvent.KEYCODE_ESCAPE)code="Escape";
+        if(code.isEmpty())return "";
+        JSONObject mapping=J.obj(project.data,"input");
+        for(java.util.Iterator<String> names=mapping.keys();names.hasNext();){
+            String action=names.next();JSONArray codes=mapping.optJSONArray(action);
+            if(codes!=null)for(int i=0;i<codes.length();i++)
+                if(code.equals(codes.optString(i)))return action;
+        }
+        return "";
     }
     public void setAction(String action, boolean active) {
         if (active) actions.add(action); else actions.remove(action);
@@ -185,7 +225,8 @@ public final class GameRuntime {
     }
     private void sound(String key) {
         String id = key.startsWith("builtin:") || key.startsWith("asset_") ? key : "builtin:sfx-" + key;
-        try { library.play(project,id); } catch (Exception ex) { log("warning", "Sound unavailable: " + key); }
+        try { library.playEffect(project,id,0.8f); }
+        catch (Exception ex) { log("warning", "Sound unavailable: " + key); }
     }
     public void tap(float x, float y) {
         aimX = x; aimY = y;
@@ -202,7 +243,7 @@ public final class GameRuntime {
             }
         }
         if (best != null) ScriptVM.dispatch(this,best,"interact",player(),null,0);
-        if ("shooter".equals(project.data.optString("genre"))) shoot();
+        if ("shooter".equals(project.data.optString("genre")) || "arcade".equals(project.data.optString("genre"))) shoot();
     }
     public double worldX(JSONObject n) { return world(n,true,new HashSet<>()); }
     public double worldY(JSONObject n) { return world(n,false,new HashSet<>()); }
@@ -233,12 +274,13 @@ public final class GameRuntime {
                         ScriptVM.dispatch(this,n,"interact",hero,null,0);
                 }
             }
-            if (action.equals("pause")) paused=true;
+            if (action.equals("pause")) setPaused(true);
         }
         previousActions.clear(); previousActions.addAll(actions);
         if (actions.contains("fire")) shoot();
         for (int i=0;i<nodes.length();i++) ScriptVM.dispatch(this,J.at(nodes,i),"update",null,null,dt);
         updateAI(dt);
+        updateTimers(dt);
         animationEvents(dt);
         Set<String> nextGround = new HashSet<>();
         for (int i=0;i<nodes.length();i++) {
@@ -304,7 +346,7 @@ public final class GameRuntime {
             cameraY+=(worldY(cameraTarget)-cameraY)*Math.min(1,smooth*60*dt);
             cameraZoom=camera==null?1:(float)camera.optDouble("zoom",1);
         }
-        if ("shooter".equals(project.data.optString("genre"))) waves(dt);
+        if ("shooter".equals(project.data.optString("genre")) || "arcade".equals(project.data.optString("genre"))) waves(dt);
         if ("racing".equals(project.data.optString("genre")) && stat("lap")>=3) {
             won=true;message="Three laps complete. Victory!";sound("level");changed();
         }
@@ -336,16 +378,31 @@ public final class GameRuntime {
             }
         }
     }
+    private double half(JSONObject node,JSONObject collider,boolean horizontal){
+        JSONObject t=J.obj(node,"transform");
+        double sx=Math.abs(t.optDouble("scaleX",1)),sy=Math.abs(t.optDouble("scaleY",1));
+        if("circle".equals(collider.optString("shape")))
+            return collider.optDouble("radius",20)*Math.max(sx,sy);
+        return collider.optDouble(horizontal?"width":"height",40)*(horizontal?sx:sy)/2;
+    }
     private boolean overlaps(JSONObject a,JSONObject b) {
         JSONObject ca=GameProject.component(a,"collider"),cb=GameProject.component(b,"collider");
-        if (ca==null || cb==null) return false;
+        if(ca==null||cb==null)return false;
         double ax=worldX(a)+ca.optDouble("offsetX"),ay=worldY(a)+ca.optDouble("offsetY");
         double bx=worldX(b)+cb.optDouble("offsetX"),by=worldY(b)+cb.optDouble("offsetY");
-        if (ca.optString("shape").equals("circle") && cb.optString("shape").equals("circle"))
-            return Math.hypot(ax-bx,ay-by)<ca.optDouble("radius",20)+cb.optDouble("radius",20);
-        JSONObject ta=J.obj(a,"transform"),tb=J.obj(b,"transform");
-        return Math.abs(ax-bx)<(ca.optDouble("width")*Math.abs(ta.optDouble("scaleX",1))+cb.optDouble("width")*Math.abs(tb.optDouble("scaleX",1)))/2 &&
-            Math.abs(ay-by)<(ca.optDouble("height")*Math.abs(ta.optDouble("scaleY",1))+cb.optDouble("height")*Math.abs(tb.optDouble("scaleY",1)))/2;
+        boolean circleA="circle".equals(ca.optString("shape")),circleB="circle".equals(cb.optString("shape"));
+        if(circleA&&circleB)return Math.hypot(ax-bx,ay-by)<half(a,ca,true)+half(b,cb,true);
+        if(circleA||circleB){
+            JSONObject circle=circleA?a:b,rectangle=circleA?b:a;
+            JSONObject round=circleA?ca:cb,box=circleA?cb:ca;
+            double cx=circleA?ax:bx,cy=circleA?ay:by;
+            double rx=circleA?bx:ax,ry=circleA?by:ay;
+            double nearestX=Math.max(rx-half(rectangle,box,true),Math.min(cx,rx+half(rectangle,box,true)));
+            double nearestY=Math.max(ry-half(rectangle,box,false),Math.min(cy,ry+half(rectangle,box,false)));
+            return Math.hypot(cx-nearestX,cy-nearestY)<half(circle,round,true);
+        }
+        return Math.abs(ax-bx)<half(a,ca,true)+half(b,cb,true) &&
+            Math.abs(ay-by)<half(a,ca,false)+half(b,cb,false);
     }
     private void resolveStatic(JSONObject moving,boolean horizontal,Set<String> nextGround) {
         JSONObject collider=GameProject.component(moving,"collider"),body=GameProject.component(moving,"body");
@@ -357,12 +414,10 @@ public final class GameRuntime {
             JSONObject shape=GameProject.component(solid,"collider");
             if (shape==null || shape.optBoolean("sensor") || !overlaps(moving,solid)) continue;
             JSONObject t=J.obj(moving,"transform");
-            double a=horizontal?worldX(moving):worldY(moving),b=horizontal?worldX(solid):worldY(solid);
-            double half=(horizontal?collider.optDouble("width")*Math.abs(J.obj(moving,"transform").optDouble("scaleX",1))+
-                shape.optDouble("width")*Math.abs(J.obj(solid,"transform").optDouble("scaleX",1)):
-                collider.optDouble("height")*Math.abs(J.obj(moving,"transform").optDouble("scaleY",1))+
-                shape.optDouble("height")*Math.abs(J.obj(solid,"transform").optDouble("scaleY",1)))/2;
-            double overlap=half-Math.abs(a-b);
+            double a=(horizontal?worldX(moving)+collider.optDouble("offsetX"):worldY(moving)+collider.optDouble("offsetY"));
+            double b=(horizontal?worldX(solid)+shape.optDouble("offsetX"):worldY(solid)+shape.optDouble("offsetY"));
+            double reach=half(moving,collider,horizontal)+half(solid,shape,horizontal);
+            double overlap=reach-Math.abs(a-b);
             if (overlap<=0) continue;
             String key=horizontal?"x":"y",speed=horizontal?"vx":"vy";
             if (!horizontal && a<b && body.optDouble("vy")>=0) nextGround.add(moving.optString("id"));
@@ -377,8 +432,7 @@ public final class GameRuntime {
             int size=Math.max(4,map.optInt("tileSize",48)),cols=map.optInt("columns",20),rows=map.optInt("rows",12);
             float startX=(float)(worldX(mapNode)-cols*size/2f),startY=(float)(worldY(mapNode)-rows*size/2f);
             double ax=worldX(moving)+collider.optDouble("offsetX"),ay=worldY(moving)+collider.optDouble("offsetY");
-            double halfW=collider.optDouble("width")*Math.abs(J.obj(moving,"transform").optDouble("scaleX",1))/2;
-            double halfH=collider.optDouble("height")*Math.abs(J.obj(moving,"transform").optDouble("scaleY",1))/2;
+            double halfW=half(moving,collider,true),halfH=half(moving,collider,false);
             int left=Math.max(0,(int)Math.floor((ax-halfW-startX)/size));
             int right=Math.min(cols-1,(int)Math.floor((ax+halfW-startX)/size));
             int top=Math.max(0,(int)Math.floor((ay-halfH-startY)/size));
@@ -398,6 +452,22 @@ public final class GameRuntime {
                 ax=worldX(moving)+collider.optDouble("offsetX");
                 ay=worldY(moving)+collider.optDouble("offsetY");
             }
+        }
+    }
+    private void updateTimers(float dt){
+        JSONArray nodes=GameProject.nodes(scene);
+        for(int i=0;i<nodes.length();i++){
+            JSONObject node=J.at(nodes,i),timer=GameProject.component(node,"timer");
+            if(timer==null||!timer.optBoolean("enabled",true))continue;
+            String id=node.optString("id");
+            float interval=Math.max(0.05f,(float)timer.optDouble("interval",2));
+            float value=timers.containsKey(id)?timers.get(id)+dt:dt;
+            if(value>=interval){
+                if(timer.optBoolean("repeat",true))value%=interval;
+                else {J.put(timer,"enabled",false);value=0;}
+                ScriptVM.dispatch(this,node,"timer",null,null,0);
+            }
+            timers.put(id,value);
         }
     }
     private void animationEvents(float dt){
@@ -456,7 +526,8 @@ public final class GameRuntime {
     private void shoot() {
         JSONObject hero=player();
         if (hero==null || !GameProject.tagged(hero,"can-shoot") || shotTimer>0) return;
-        double dx=aimX-worldX(hero),dy=aimY-worldY(hero);
+        double dx=aimX==0&&aimY==0?1:aimX-worldX(hero);
+        double dy=aimX==0&&aimY==0?0:aimY-worldY(hero);
         double angle=Math.hypot(dx,dy)>35?Math.atan2(dy,dx):Math.toRadians(J.obj(hero,"transform").optDouble("rotation"));
         JSONObject bullet=GameProject.newNode("Projectile",worldX(hero)+Math.cos(angle)*27,
             worldY(hero)+Math.sin(angle)*27,13,13);

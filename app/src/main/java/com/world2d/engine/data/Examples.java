@@ -23,7 +23,7 @@ public final class Examples {
             case "shooter": return shooter();
             case "racing": return racing(library);
             case "adventure": return adventure();
-            case "puzzle": { GameProject p = rpg(); J.put(p.data, "name", "Puzzle Starter"); J.put(p.data, "genre", "puzzle"); return p; }
+            case "puzzle": return puzzle();
             case "arcade": { GameProject p = shooter(); J.put(p.data, "name", "Arcade Starter"); J.put(p.data, "genre", "arcade"); return p; }
             default: return GameProject.create("Untitled World", "empty", 960, 540);
         }
@@ -72,7 +72,7 @@ public final class Examples {
     }
     private static void forest(JSONObject scene) {
         for (int i = 0; i < 9; i++) {
-            art(scene, "Forest tree " + (i + 1), "builtin:nature-" + (i * 7), 40 + i * 126, 403 + i % 3 * 17, 106, 145, -5);
+            art(scene, "Forest tree " + (i + 1), "builtin:nature-" + ((i * 7) % 42), 40 + i * 126, 403 + i % 3 * 17, 106, 145, -5);
         }
     }
     private static void platformGround(JSONObject scene) {
@@ -142,7 +142,7 @@ public final class Examples {
         GameProject p = GameProject.create("Lantern Valley", "rpg", 960, 540); J.put(p.data, "gravity", 0);
         JSONObject village = p.firstScene(); J.put(village, "name", "Lantern Village"); J.put(village, "background", "#426957");
         floor(village, "builtin:texture-0");
-        for (int i = 0; i < 7; i++) art(village, "Willow tree", "builtin:nature-" + i * 7, 55 + i * 155, i % 2 == 0 ? 76 : 464, 80, 92, -2);
+        for (int i = 0; i < 7; i++) art(village, "Willow tree", "builtin:nature-" + ((i * 7) % 42), 55 + i * 155, i % 2 == 0 ? 76 : 464, 80, 92, -2);
         art(village, "The old inn", "builtin:building-2", 730, 140, 150, 145, 0);
         art(village, "Village cottage", "builtin:building-0", 255, 133, 125, 130, 0);
         label(village, "LANTERN VILLAGE", 480, 47, 21, "#edf9e6");
@@ -182,6 +182,29 @@ public final class Examples {
             JSONObject foe = enemy(p, arena, 160 + i * 206, i % 2 == 0 ? 145 : 405, i * 4 + 2, false);
             J.put(J.obj(foe, "metadata"), "hp", 2);
         }
+        return p;
+    }
+    private static GameProject puzzle(){
+        GameProject p=GameProject.create("Crystal Circuit","puzzle",960,540);
+        J.put(p.data,"gravity",0);
+        JSONObject scene=p.firstScene();J.put(scene,"name","Circuit Chamber");J.put(scene,"background","#35475e");
+        floor(scene,"builtin:texture-80");
+        label(scene,"THE CRYSTAL CIRCUIT",480,55,26,"#e8f5ff");
+        label(scene,"Tap the three runes in order, then enter the portal",480,90,16,"#cae5f1");
+        player(p,scene,144,295,"topdown","builtin:player-8");
+        int[] x={300,490,675},y={307,180,310};
+        for(int i=0;i<3;i++){
+            JSONObject rune=art(scene,"Rune "+(i+1),"builtin:prop-"+(20+i),x[i],y[i],66,66,5);
+            GameProject.tag(rune,"puzzle");
+            scripted(p,rune,"Rune "+(i+1),"on_interact:\n"+
+                "  if score == "+i+": add score 1\n"+
+                "  if score < "+(i+1)+": message \"Activate the runes from left to right.\"\n"+
+                "  if score == "+(i+1)+": message \"Rune "+(i+1)+" activated!\"");
+        }
+        JSONObject portal=art(scene,"Crystal portal","builtin:prop-27",867,273,80,100,6);
+        GameProject.addComponent(portal,GameProject.collider(72,92,true));
+        scripted(p,portal,"Circuit exit","on_collision(player):\n"+
+            "  if score >= 3: win\n  if score < 3: message \"Three runes unlock the portal.\"");
         return p;
     }
     private static JSONObject modularCar(GameProject p, AssetLibrary library, JSONObject scene, String id, String name, int x, int y) {
@@ -229,7 +252,7 @@ public final class Examples {
     private static GameProject adventure() {
         GameProject p = GameProject.create("The Verdant Key", "adventure", 960, 540); J.put(p.data, "gravity", 0);
         JSONObject menu = p.firstScene(); J.put(menu, "name", "Main Menu"); J.put(menu, "background", "#304d5d");
-        for (int i = 0; i < 7; i++) art(menu, "Forest silhouette", "builtin:nature-" + i * 7, i * 160, 430, 165, 190, -4);
+        for (int i = 0; i < 7; i++) art(menu, "Forest silhouette", "builtin:nature-" + ((i * 7) % 42), i * 160, 430, 165, 190, -4);
         art(menu, "The Verdant Key", "builtin:prop-29", 480, 153, 84, 84, 1);
         label(menu, "THE VERDANT KEY", 480, 250, 42, "#effcde");
         label(menu, "An adventure in two worlds", 480, 307, 19, "#c6e4df");

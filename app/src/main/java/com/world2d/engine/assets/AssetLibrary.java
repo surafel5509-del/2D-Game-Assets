@@ -4,6 +4,8 @@ import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.media.MediaPlayer;
+import android.media.AudioAttributes;
+import android.media.SoundPool;
 import android.util.LruCache;
 import com.world2d.engine.data.GameProject;
 import com.world2d.engine.data.J;
@@ -20,6 +22,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.HashSet;
+import java.util.Set;
 
 /** 623 offline, real image/audio resources. Bitmaps are decoded lazily with an LRU memory budget. */
 public final class AssetLibrary {
@@ -47,7 +51,11 @@ public final class AssetLibrary {
     private final LruCache<String, Bitmap> cache = new LruCache<String, Bitmap>(24 * 1024 * 1024) {
         @Override protected int sizeOf(String key, Bitmap value) { return value.getByteCount(); }
     };
-    private MediaPlayer previewPlayer;
+    private MediaPlayer previewPlayer, ambientPlayer;
+    private SoundPool effects;
+    private final Map<String,Integer> effectIds = new HashMap<>();
+    private final Map<Integer,Float> queuedEffects = new HashMap<>();
+    private final Set<Integer> readyEffects = new HashSet<>();
     public AssetLibrary(Context context, ProjectStore store) throws IOException, JSONException {
         this.context = context.getApplicationContext(); this.store = store;
         try (InputStream in = context.getAssets().open("library/catalog.json")) {
@@ -120,34 +128,66 @@ public final class AssetLibrary {
             return decoded;
         } catch (Exception ex) { return null; }
     }
-    public void play(GameProject project, String id) throws IOException {
-        Entry entry = get(project, id);
-        if (entry == null || !entry.kind.equals("audio")) throw new IOException("Audio resource not found.");
-        stopAudio();
-        File file;
-        if (entry.builtin) {
-            File cacheDir = new File(context.getCacheDir(), "sfx"); cacheDir.mkdirs();
-            file = new File(cacheDir, id.replaceAll("[^a-zA-Z0-9_-]", "") + ".wav");
-            if (!file.isFile()) {
-                try (InputStream in = context.getAssets().open(entry.path);
-                     FileOutputStream out = new FileOutputStream(file)) {
-                    byte[] buffer = new byte[8192]; int n;
-                    while ((n = in.read(buffer)) != -1) out.write(buffer, 0, n);
-                }
-            }
-        } else file = store.assetFile(project, entry.path);
-        if (file == null || !file.isFile()) throw new IOException("Audio file is missing. Replace it in the asset browser.");
-        previewPlayer = new MediaPlayer();
-        try {
-            previewPlayer.setDataSource(file.getAbsolutePath());
-            previewPlayer.prepare(); previewPlayer.start();
-            previewPlayer.setOnCompletionListener(player -> stopAudio());
-        } catch (Exception ex) { stopAudio(); throw new IOException("Cannot play this audio file.", ex); }
+    private File audioFile(GameProject project,String id) throws IOException {
+        Entry entry=get(project,id);
+        if(entry==null||!entry.kind.equals("audio"))throw new IOException("Audio resource not found: "+id);
+        if(!entry.builtin){File file=store.assetFile(project,entry.path);
+            if(file==null||!file.isFile())throw new IOException("Audio file is missing. Replace it in the asset browser.");
+            return file;
+        }
+        File directory=new File(context.getCacheDir(),"sfx");directory.mkdirs();
+        File file=new File(directory,id.replaceAll("[^a-zA-Z0-9_-]","")+".wav");
+        if(!file.isFile())try(InputStream in=context.getAssets().open(entry.path);
+                FileOutputStream out=new FileOutputStream(file)){
+            byte[] buffer=new byte[8192];int n;while((n=in.read(buffer))!=-1)out.write(buffer,0,n);
+        }
+        return file;
     }
-    public void stopAudio() {
-        if (previewPlayer != null) { try { previewPlayer.stop(); } catch (Exception ignored) { }
-            previewPlayer.release(); previewPlayer = null; }
+    /** Preview is separate from runtime audio so inspecting assets does not stop music or effects. */
+    public void play(GameProject project,String id) throws IOException {
+        stopPreview();File file=audioFile(project,id);
+        previewPlayer=new MediaPlayer();
+        try{previewPlayer.setDataSource(file.getAbsolutePath());previewPlayer.prepare();previewPlayer.start();
+            previewPlayer.setOnCompletionListener(player->stopPreview());
+        }catch(Exception ex){stopPreview();throw new IOException("Cannot play this audio file.",ex);}
     }
+    /** Low latency, overlapping voices for effects and gameplay audio. */
+    public void playEffect(GameProject project,String id,float volume) throws IOException {
+        File file=audioFile(project,id);
+        if(effects==null){
+            AudioAttributes attributes=new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_GAME)
+                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build();
+            effects=new SoundPool.Builder().setMaxStreams(8).setAudioAttributes(attributes).build();
+            effects.setOnLoadCompleteListener((pool,sound,status)->{
+                if(status==0){readyEffects.add(sound);Float pending=queuedEffects.remove(sound);
+                    if(pending!=null)pool.play(sound,pending,pending,1,0,1);}
+            });
+        }
+        float level=Math.max(0,Math.min(1,volume));
+        Integer sound=effectIds.get(id);
+        if(sound==null){sound=effects.load(file.getAbsolutePath(),1);if(sound==0)throw new IOException("Cannot load sound effect.");
+            effectIds.put(id,sound);queuedEffects.put(sound,level);
+        }else if(readyEffects.contains(sound))effects.play(sound,level,level,1,0,1);
+        else queuedEffects.put(sound,level);
+    }
+    /** A looping ambient source plays alongside SoundPool effects. */
+    public void playAmbient(GameProject project,String id,float volume) throws IOException {
+        File file=audioFile(project,id);stopAmbient();
+        ambientPlayer=new MediaPlayer();
+        try{ambientPlayer.setDataSource(file.getAbsolutePath());ambientPlayer.setLooping(true);
+            float level=Math.max(0,Math.min(1,volume));ambientPlayer.setVolume(level,level);
+            ambientPlayer.prepare();ambientPlayer.start();
+        }catch(Exception ex){stopAmbient();throw new IOException("Cannot play background audio.",ex);}
+    }
+    public void pauseAmbient(){if(ambientPlayer!=null&&ambientPlayer.isPlaying())ambientPlayer.pause();}
+    public void resumeAmbient(){if(ambientPlayer!=null&&!ambientPlayer.isPlaying())ambientPlayer.start();}
+    public void stopAmbient(){if(ambientPlayer!=null){try{ambientPlayer.stop();}catch(Exception ignored){}
+        ambientPlayer.release();ambientPlayer=null;}}
+    public void stopGameAudio(){stopAmbient();if(effects!=null){effects.release();effects=null;}
+        effectIds.clear();queuedEffects.clear();readyEffects.clear();}
+    private void stopPreview(){if(previewPlayer!=null){try{previewPlayer.stop();}catch(Exception ignored){}
+        previewPlayer.release();previewPlayer=null;}}
+    public void stopAudio(){stopPreview();stopGameAudio();}
     public JSONObject readPreset(String filename) throws IOException, JSONException {
         try (InputStream in = context.getAssets().open("library/" + filename)) {
             byte[] bytes = new byte[in.available()]; int count = in.read(bytes);

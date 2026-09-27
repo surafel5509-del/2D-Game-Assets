@@ -88,7 +88,7 @@ public final class AndroidGameExporter {
                 "This is a native Android Gradle project containing the exported 2D WORLD game data and runtime. " +
                 "It is not an APK.\n\nInstall JDK 17 and Android SDK Platform 35 + Build Tools 35. " +
                 "Open the folder in Android Studio and choose Build → Build APK(s). " +
-                "Or run `./gradlew :app:assembleDebug`. " +
+                "Or run `chmod +x gradlew && ./gradlew :app:assembleDebug` after extracting this ZIP. " +
                 "The debug APK is at app/build/outputs/apk/debug/app-debug.apk.\n\n"+
                 "Do not distribute a debug-signed APK as a release. Configure your own signing key for release builds.\n"+
                 "All game scenes, imported assets and bundled CC0 resources are in app/src/main/assets.\n"+

@@ -267,18 +267,20 @@ public final class Panels {
     private static void duplicateAsset(MainActivity a,AssetLibrary.Entry entry){
         if(a.project==null)return;
         try{
-            String id=J.id("asset"),ext=entry.kind.equals("audio")?"wav":"png";
+            String id=J.id("asset");
+            String ext=entry.path.substring(entry.path.lastIndexOf('.')+1).toLowerCase(java.util.Locale.ROOT);
+            if(!ext.matches("png|jpg|webp|gif|wav|mp3|ogg"))throw new java.io.IOException("Unsupported source type.");
             String src="assets/"+id+"."+ext;
-            File dest=a.store.assetFile(a.project,src);dest.getParentFile().mkdirs();
-            if(entry.kind.equals("image")){
-                Bitmap bitmap=a.library.bitmap(a.project,entry.id,Math.max(64,entry.width*2));
-                if(bitmap==null)throw new java.io.IOException("Missing image data.");
-                try(FileOutputStream out=new FileOutputStream(dest)){bitmap.compress(Bitmap.CompressFormat.PNG,100,out);}
-            }else if(entry.builtin){
+            File dest=a.store.assetFile(a.project,src);
+            if(dest==null)throw new java.io.IOException("Invalid destination.");
+            dest.getParentFile().mkdirs();
+            // Copy the original bytes: no quality loss, GIF flattening, or huge bitmap decoding.
+            if(entry.builtin){
                 try(java.io.InputStream in=a.getAssets().open(entry.path);FileOutputStream out=new FileOutputStream(dest)){
                     byte[] buffer=new byte[8192];int n;while((n=in.read(buffer))!=-1)out.write(buffer,0,n);}
             }else{
                 File from=a.store.assetFile(a.project,entry.path);
+                if(from==null||!from.isFile())throw new java.io.IOException("Missing source asset.");
                 try(FileInputStream in=new FileInputStream(from);FileOutputStream out=new FileOutputStream(dest)){
                     byte[] buffer=new byte[8192];int n;while((n=in.read(buffer))!=-1)out.write(buffer,0,n);}
             }

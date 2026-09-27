@@ -88,8 +88,9 @@ public final class MainActivity extends Activity implements SceneView.Events {
         super.onSaveInstanceState(out);
     }
     @Override protected void onPause(){super.onPause();if(editor&&project!=null&&dirty)save(false);
-        if(viewport!=null)viewport.setAlive(false);}
-    @Override protected void onResume(){super.onResume();if(viewport!=null)viewport.setAlive(true);}
+        if(viewport!=null){viewport.setAlive(false);if(viewport.runtime()!=null)viewport.runtime().pauseAudio();}}
+    @Override protected void onResume(){super.onResume();if(viewport!=null){viewport.setAlive(true);
+        if(viewport.runtime()!=null)viewport.runtime().resumeAudio();}}
     @Override protected void onDestroy(){handler.removeCallbacks(autosave);handler.removeCallbacks(recovery);
         if(library!=null)library.stopAudio();super.onDestroy();}
     private void setRoot(){
@@ -134,7 +135,8 @@ public final class MainActivity extends Activity implements SceneView.Events {
         markChanged(true);}
     private void showHome(){
         if(panelDialog!=null){panelDialog.dismiss();panelDialog=null;}
-        if(viewport!=null){viewport.setRuntime(null);viewport.setAlive(false);}
+        if(viewport!=null){if(viewport.runtime()!=null)viewport.runtime().stopAudio();
+            viewport.setRuntime(null);viewport.setAlive(false);}
         editor=false;fullscreen=false;project=null;scene=null;viewport=null;selectedId=null;
         getPreferences(0).edit().remove("active-project").apply();
         setRoot();
@@ -619,6 +621,8 @@ public final class MainActivity extends Activity implements SceneView.Events {
                     }
                     JSONObject json=new JSONObject(bytes.toString("UTF-8"));
                     GameProject.validate(json);imported=new GameProject(json);
+                    if(imported.assets().length()>0)throw new java.io.IOException(
+                        "This JSON references imported files. Import its .2dw archive instead to keep those assets.");
                     J.put(imported.data,"id",J.id("project"));J.put(imported.data,"name",imported.name()+" (imported)");
                     store.save(imported,false);
                 }else try(java.io.InputStream in=getContentResolver().openInputStream(uri)){imported=store.importZip(in);}
@@ -687,9 +691,12 @@ public final class MainActivity extends Activity implements SceneView.Events {
         if(viewport.runtime()!=null)stopPreview();
         GameRuntime runtime=new GameRuntime(this,project,startScene?project.data.optString("startSceneId"):scene.optString("id"),library);
         runtime.onChange=()->handler.post(()->{if(viewport!=null)viewport.invalidate();});
-        viewport.setRuntime(runtime);previewControls=Ui.horizontal(this);
+        viewport.setRuntime(runtime);
+        FrameLayout.LayoutParams gameArea=(FrameLayout.LayoutParams)viewport.getLayoutParams();
+        gameArea.bottomMargin=Ui.dp(this,66);viewport.setLayoutParams(gameArea);
+        previewControls=Ui.horizontal(this);
         previewControls.setBackground(Ui.background(this,Ui.SURFACE,11,Ui.BORDER));
-        addTool(previewControls,"Ⅱ","Pause or resume",v->{runtime.paused=!runtime.paused;viewport.invalidate();});
+        addTool(previewControls,"Ⅱ","Pause or resume",v->runtime.setPaused(!runtime.paused));
         addTool(previewControls,"↻","Restart",v->runtime.restart(startScene?null:scene.optString("id")));
         addTool(previewControls,"⚿","Collision debug",v->{runtime.collisionDebug=!runtime.collisionDebug;viewport.invalidate();});
         addTool(previewControls,"⛶","Full screen",v->toggleFullscreen());
@@ -714,7 +721,10 @@ public final class MainActivity extends Activity implements SceneView.Events {
     }
     private void touchButton(LinearLayout row,String label,String action,GameRuntime runtime,boolean accent){
         TextView button=Ui.button(this,label,accent);button.setTextSize(17);
-        LinearLayout.LayoutParams params=new LinearLayout.LayoutParams(Ui.dp(this,43),Ui.dp(this,46));
+        button.setMinWidth(0);button.setPadding(0,0,0,0);
+        int available=(int)(getResources().getDisplayMetrics().widthPixels/getResources().getDisplayMetrics().density);
+        int buttonWidth=Math.max(31,Math.min(43,(available-24)/7-3));
+        LinearLayout.LayoutParams params=new LinearLayout.LayoutParams(Ui.dp(this,buttonWidth),Ui.dp(this,46));
         params.rightMargin=Ui.dp(this,3);row.addView(button,params);
         button.setContentDescription(action);
         button.setOnTouchListener((view,event)->{
@@ -724,7 +734,9 @@ public final class MainActivity extends Activity implements SceneView.Events {
         });
     }
     private void stopPreview(){if(viewport==null||viewport.runtime()==null)return;
-        viewport.runtime().stopped=true;viewport.setRuntime(null);
+        viewport.runtime().stopped=true;viewport.runtime().stopAudio();viewport.setRuntime(null);
+        FrameLayout.LayoutParams editorArea=(FrameLayout.LayoutParams)viewport.getLayoutParams();
+        editorArea.bottomMargin=0;viewport.setLayoutParams(editorArea);
         if(previewControls!=null)viewLayer.removeView(previewControls);
         if(virtualControls!=null)viewLayer.removeView(virtualControls);
         previewControls=null;virtualControls=null;
@@ -752,24 +764,7 @@ public final class MainActivity extends Activity implements SceneView.Events {
         super.onBackPressed();
     }
     private String keyAction(int keyCode){
-        String code="";
-        if(keyCode>=KeyEvent.KEYCODE_A&&keyCode<=KeyEvent.KEYCODE_Z)
-            code="Key"+(char)('A'+keyCode-KeyEvent.KEYCODE_A);
-        else if(keyCode==KeyEvent.KEYCODE_DPAD_LEFT)code="ArrowLeft";
-        else if(keyCode==KeyEvent.KEYCODE_DPAD_RIGHT)code="ArrowRight";
-        else if(keyCode==KeyEvent.KEYCODE_DPAD_UP)code="ArrowUp";
-        else if(keyCode==KeyEvent.KEYCODE_DPAD_DOWN)code="ArrowDown";
-        else if(keyCode==KeyEvent.KEYCODE_SPACE||keyCode==KeyEvent.KEYCODE_BUTTON_A)code="Space";
-        else if(keyCode==KeyEvent.KEYCODE_ENTER||keyCode==KeyEvent.KEYCODE_BUTTON_R1)code="Enter";
-        else if(keyCode==KeyEvent.KEYCODE_ESCAPE)code="Escape";
-        if(project==null||code.isEmpty())return "";
-        JSONObject mapping=J.obj(project.data,"input");
-        for(java.util.Iterator<String> names=mapping.keys();names.hasNext();){
-            String action=names.next();JSONArray codes=mapping.optJSONArray(action);
-            if(codes!=null)for(int i=0;i<codes.length();i++)
-                if(code.equals(codes.optString(i)))return action;
-        }
-        return "";
+        return viewport!=null&&viewport.runtime()!=null?viewport.runtime().mapKey(keyCode):"";
     }
     @Override public boolean onKeyDown(int keyCode,KeyEvent event){
         if(editor&&event.isCtrlPressed()){
@@ -779,9 +774,9 @@ public final class MainActivity extends Activity implements SceneView.Events {
             if(keyCode==KeyEvent.KEYCODE_K){globalSearch();return true;}
         }
         if(viewport!=null&&viewport.runtime()!=null){String action=keyAction(keyCode);
-            if(action.equals("pause")){viewport.runtime().paused=!viewport.runtime().paused;viewport.invalidate();return true;}
+            if(action.equals("pause")){if(event.getRepeatCount()==0)viewport.runtime().setPaused(!viewport.runtime().paused);return true;}
             if(!action.isEmpty()){viewport.runtime().setAction(action,true);return true;}
-            if(keyCode==KeyEvent.KEYCODE_ESCAPE){viewport.runtime().paused=!viewport.runtime().paused;return true;}
+            if(keyCode==KeyEvent.KEYCODE_ESCAPE){if(event.getRepeatCount()==0)viewport.runtime().setPaused(!viewport.runtime().paused);return true;}
         }
         if(editor&&keyCode==KeyEvent.KEYCODE_DEL&&selectedNode()!=null){chooseObjectAction(selectedId);return true;}
         return super.onKeyDown(keyCode,event);

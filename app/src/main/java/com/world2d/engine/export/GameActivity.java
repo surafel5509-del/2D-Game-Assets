@@ -6,6 +6,7 @@ import android.graphics.Color;
 import android.os.Bundle;
 import android.view.Gravity;
 import android.view.MotionEvent;
+import android.view.KeyEvent;
 import android.view.View;
 import android.view.WindowManager;
 import android.widget.FrameLayout;
@@ -56,7 +57,8 @@ public final class GameActivity extends Activity {
             game=new GameRuntime(this,project,project.data.optString("startSceneId"),assets);
             FrameLayout layout=new FrameLayout(this);layout.setBackgroundColor(Color.rgb(14,19,29));setContentView(layout);
             canvas=new SceneView(this,assets);canvas.setProject(project,project.firstScene());canvas.setRuntime(game);
-            layout.addView(canvas,new FrameLayout.LayoutParams(-1,-1));
+            FrameLayout.LayoutParams canvasArea=new FrameLayout.LayoutParams(-1,-1);
+            canvasArea.bottomMargin=dp(69);layout.addView(canvas,canvasArea);
             LinearLayout controls=new LinearLayout(this);controls.setOrientation(LinearLayout.HORIZONTAL);
             controls.setGravity(Gravity.CENTER_VERTICAL);controls.setPadding(8,8,8,12);
             for(String[] pair:new String[][]{{"◀","left"},{"▼","down"},{"▲","up"},{"▶","right"}})
@@ -67,11 +69,12 @@ public final class GameActivity extends Activity {
             layout.addView(controls,new FrameLayout.LayoutParams(-1,-2,Gravity.BOTTOM));
             TextView pause=new TextView(this);pause.setText("Ⅱ");pause.setTextSize(21);pause.setTextColor(Color.WHITE);
             pause.setGravity(Gravity.CENTER);pause.setBackgroundColor(Color.argb(140,16,26,38));
-            pause.setOnClickListener(v->new AlertDialog.Builder(this).setTitle("Game paused")
+            pause.setOnClickListener(v->{game.setPaused(true);
+                new AlertDialog.Builder(this).setTitle("Game paused")
                 .setItems(new String[]{"Resume","Restart","Exit"},(d,which)->{
-                    if(which==0)game.paused=false;
+                    if(which==0)game.setPaused(false);
                     else if(which==1)game.restart(null);else finish();
-                }).setOnCancelListener(d->game.paused=false).show());
+                }).setOnCancelListener(d->game.setPaused(false)).show();});
             game.onChange=()->canvas.postInvalidate();
             FrameLayout.LayoutParams pauseParams=new FrameLayout.LayoutParams(dp(46),dp(46),Gravity.RIGHT|Gravity.TOP);
             pauseParams.setMargins(0,dp(12),dp(12),0);layout.addView(pause,pauseParams);
@@ -84,7 +87,9 @@ public final class GameActivity extends Activity {
         TextView key=new TextView(this);key.setText(glyph);key.setTextSize(20);
         key.setGravity(Gravity.CENTER);key.setTextColor(Color.WHITE);
         key.setBackgroundColor(Color.argb(165,23,39,52));
-        LinearLayout.LayoutParams params=new LinearLayout.LayoutParams(dp(43),dp(48));params.rightMargin=dp(3);
+        int available=(int)(getResources().getDisplayMetrics().widthPixels/getResources().getDisplayMetrics().density);
+        int buttonWidth=Math.max(31,Math.min(43,(available-24)/7-3));
+        LinearLayout.LayoutParams params=new LinearLayout.LayoutParams(dp(buttonWidth),dp(48));params.rightMargin=dp(3);
         row.addView(key,params);
         key.setOnTouchListener((v,event)->{
             if(event.getActionMasked()==MotionEvent.ACTION_DOWN){game.setAction(action,true);return true;}
@@ -93,8 +98,21 @@ public final class GameActivity extends Activity {
             }return true;
         });
     }
-    @Override protected void onPause(){super.onPause();if(game!=null)game.paused=true;if(canvas!=null)canvas.setAlive(false);}
+    @Override protected void onPause(){super.onPause();if(game!=null)game.setPaused(true);if(canvas!=null)canvas.setAlive(false);}
     @Override protected void onResume(){super.onResume();if(canvas!=null)canvas.setAlive(true);}
-    @Override public void onBackPressed(){if(game!=null)game.paused=!game.paused;else super.onBackPressed();}
+    @Override public boolean onKeyDown(int keyCode,KeyEvent event){
+        if(game!=null){String action=game.mapKey(keyCode);
+            if(action.equals("pause")){if(event.getRepeatCount()==0)game.setPaused(!game.paused);return true;}
+            if(!action.isEmpty()){game.setAction(action,true);return true;}
+        }
+        return super.onKeyDown(keyCode,event);
+    }
+    @Override public boolean onKeyUp(int keyCode,KeyEvent event){
+        if(game!=null){String action=game.mapKey(keyCode);
+            if(!action.isEmpty()){game.setAction(action,false);return true;}
+        }
+        return super.onKeyUp(keyCode,event);
+    }
+    @Override public void onBackPressed(){if(game!=null)game.setPaused(!game.paused);else super.onBackPressed();}
     @Override protected void onDestroy(){if(assets!=null)assets.stopAudio();super.onDestroy();}
 }
