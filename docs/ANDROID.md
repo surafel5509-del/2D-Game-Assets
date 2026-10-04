@@ -82,19 +82,34 @@ gradle :app-android:assembleDebug         # the editor APK
 gradle :app-android:assembleRelease       # R8 + resource shrinking (signed with the CI keystore)
 ```
 
-Release signing uses `LUMEN_KEYSTORE`/`LUMEN_KEYSTORE_PASSWORD`/`LUMEN_KEY_ALIAS`/`LUMEN_KEY_PASSWORD`
-when set, and falls back to the standard debug keystore otherwise, so every CI build is installable.
+Release signing uses a keystore from `$LUMEN_KEYSTORE` when one is provided (CI creates the standard
+debug keystore), and falls back to AGP's own debug signing config otherwise — so a clean checkout
+always builds an installable release APK.
 
 ### CI
 
-`.github/workflows/android.yml` runs on pushes to `main`/`arena/*` and on tags:
+`.github/workflows/android.yml` runs on pushes to `main`/`arena/*`, on tags and on pull requests, and
+does not simply build the APK — it verifies it:
 
 1. **Engine core tests** — JDK 17, Gradle 8.14.3, `:engine-core:engineTests` (125 tests).
-2. **Build Android APK** — installs `platforms;android-36` + `build-tools;36.0.0`, regenerates the
-   content, smoke-checks every sample, assembles debug + release, uploads `lumen2d-studio-apk`, and
-   (on `main`, `arena/*` and tags) refreshes the **latest-build** GitHub release with both APKs.
-3. **Desktop renderer smoke test** — regenerates the library and samples, checks every sample game
-   headlessly, and renders the seven preview screenshots as an artifact.
+2. **Asset library, samples and previews** — regenerates the content and fails if the committed
+   files differ from the engine's output, smoke-checks every sample headlessly, renders the seven
+   preview screenshots, and self-tests the APK verifier.
+3. **Build and verify the Android APK** — installs `platforms;android-36` + `build-tools;36.0.0`
+   into the runner's SDK, assembles debug + release, and verifies both with `tools/verify-apk.sh`
+   (manifest, signature, dex, pack manifests, sidecars, provenance index, sample projects,
+   `noCompress`, and an exact comparison against the repository's content).
+4. **Install and run the APK on an emulator** — boots a headless API 30 emulator, installs the debug
+   APK, checks that the hub starts and lists all three bundled sample games (which proves the
+   packaged `assets/samples` were read and seeded on device), taps **Play**, and requires a
+   `Scene … loaded` line from the engine in logcat. Screenshots of the hub and the running editor are
+   uploaded as `lumen2d-device-screenshots`.
+5. **Re-verify the artifacts and publish the release** — downloads the uploaded APKs, verifies them a
+   second time independently, and refreshes the **latest-build** release (or the tag release) with
+   the APKs, their SHA-256 checksums and both verification reports in the release notes.
+
+The APK is therefore only published after it has been inspected statically *and* executed on a
+device. `docs/BUILDING.md` §6 documents the individual checks and how to run them locally.
 
 ### Working without an Android SDK
 

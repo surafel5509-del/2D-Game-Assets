@@ -71,7 +71,7 @@ fun Context.label(
 ): TextView {
     val view = TextView(this)
     view.text = text
-    view.textColor = color
+    view.setTextColor(color)
     view.textSize = sizeDp
     view.typeface = when {
         monospace -> Typeface.MONOSPACE
@@ -94,7 +94,7 @@ fun Context.button(
     view.text = text
     view.isAllCaps = false
     view.textSize = 12f
-    view.textColor = Studio.TEXT
+    view.setTextColor(Studio.TEXT)
     view.background = roundedBackground(if (primary) Studio.ACCENT_SOFT else Studio.PANEL_ALT, 8f, Studio.PANEL_HIGH, 1f)
     view.setPadding(dp(12f), dp(6f), dp(12f), dp(6f))
     view.setOnClickListener { onClick(it) }
@@ -106,7 +106,7 @@ fun Context.textField(value: String, hintText: String = "", multiline: Boolean =
     view.text = value
     view.hint = hintText
     view.textSize = 12f
-    view.textColor = Studio.TEXT
+    view.setTextColor(Studio.TEXT)
     view.typeface = Typeface.MONOSPACE
     view.isSingleLine = !multiline
     view.background = roundedBackground(Studio.PANEL_HIGH, 6f)

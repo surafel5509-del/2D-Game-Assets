@@ -114,21 +114,61 @@ broke during development:
 
 ## 6. CI
 
-`.github/workflows/android.yml` (see it for the exact steps) has three jobs:
+`.github/workflows/android.yml` (see it for the exact steps) runs on every push, pull request, tag and
+manual dispatch, and is built around one rule: **an artifact is not finished until it has been
+verified.**
 
-1. **Engine core tests** — JDK 17 + Gradle 8.14.3 + `:engine-core:engineTests`.
-2. **Build Android APK** — SDK 36, regenerate content, `checkSamples`, `assembleDebug/Release`,
-   upload `lumen2d-studio-apk`, and publish/refresh the rolling `latest-build` release on `main`,
-   `arena/*` and tags.
-3. **Desktop renderer smoke test** — regenerate content, check every sample, render the previews,
-   upload them as an artifact.
+| Job | What it proves |
+| --- | --- |
+| **Engine core tests (JVM)** | the engine suite passes under Gradle 8.14.3 + JDK 17 (`:engine-core:engineTests`) |
+| **Asset library, samples and previews** | regenerating `assets-library/`/`sample-games/` changes nothing (committed content == engine output), every sample runs headlessly, the seven previews render, and the APK verifier's own self-test passes |
+| **Build and verify the Android APK** | SDK 36 assembles debug + release; both APKs pass the static verification below |
+| **Install and run the APK on an emulator** | a headless API 30 emulator installs the debug APK, the hub launches and lists all three bundled samples, and playing one makes the engine log a scene load |
+| **Re-verify the artifacts and publish the release** | the *uploaded* APKs are downloaded and verified again independently, then published as the rolling `latest-build` release with checksums and both verification reports in the notes |
+
+Every build step runs through `tools/ci-run.sh`, which tees its output to `ci-logs/` (uploaded as an
+artifact) and turns a failure into GitHub annotations plus a step summary — a red run can be
+understood from the run page alone, without downloading logs.
+
+### Verifying an APK by hand
+
+```bash
+tools/verify-apk.sh app-android/build/outputs/apk/debug/app-android-debug.apk --expect debug
+```
+
+`tools/verify-apk.sh` drives the SDK's own tools (`aapt2 dump badging`, `aapt2 dump files`,
+`apksigner verify`) and then `tools/verify-apk.py` for the content, which is where the engine-specific
+mistakes live:
+
+* the APK is a valid, CRC-clean zip with `AndroidManifest.xml`, `classes.dex` (magic-checked) and
+  `resources.arsc`, and a real signature (v2 or v3) with a certificate;
+* package/version/minSdk 24/targetSdk 36/launcher/label/permissions match what the project declares;
+* every pack's `pack.json` lists exactly the assets that are packaged, every asset carries its
+  `*.meta.json` sidecar, and each sidecar parses and names a licence;
+* the provenance index (`assets/sources/<pack>/index.json`) describes exactly the assets the pack
+  publishes, and every record resolves to a packaged file;
+* all three sample projects are complete inside the APK — `project.lumen`, an `input_map.json` that
+  parses, at least one scene, at least one script, and the start scene the manifest points at;
+* media and JSON assets are stored uncompressed (the `noCompress` list really applied);
+* the packaged asset tree is *identical* to the repository's (`--content-root`), so the APK cannot
+  ship stale or hand-edited content;
+* on a debug build, the engine classes (`Game`, `MainActivity`, `AndroidPlatform`) are present in the
+  dex — on a release build the shrunk dex size is checked instead.
+
+Everything is reported as a markdown table, written to the step summary and, on failure, to
+annotations. `tools/verify-apk-selftest.sh` builds a healthy APK and a deliberately broken one out of
+the repository's own content and asserts the verifier accepts one and rejects the other, so the
+verifier cannot rot silently; it needs no SDK and runs in CI on every push.
 
 ## 7. Repository conventions
 
-* **Generated content is committed.** `assets-library/` and `sample-games/` are outputs of the
-  engine, and they are checked in so the repository (and the APK) works without a generation step.
-  Regenerate them with `--export-assets` / `--export-samples` after changing the engine, and commit
-  the diff — the tests will tell you if they no longer agree.
+* **Generated content is committed and reproducible.** `assets-library/` and `sample-games/` are
+  outputs of the engine, checked in so the repository (and the APK) works without a generation step.
+  Regenerating them is byte-for-byte deterministic — `Project.save(savedAtMillis)` lets the sample
+  generator write a fixed timestamp instead of "now" — so CI regenerates the content on every push
+  and fails the build if `git diff` is not empty. After changing the engine, run
+  `--export-assets` / `--export-samples` (or `gradle :engine-desktop:exportContent`) and commit the
+  result.
 * **Build output never is.** `out/`, `build/`, `.gradle/` and `docs/preview/generated/frames/` are
   ignored.
 * **Provenance is part of a pack.** If you add an asset, add its sidecar and (for generated content)

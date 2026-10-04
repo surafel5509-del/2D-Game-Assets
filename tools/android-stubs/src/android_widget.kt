@@ -74,7 +74,9 @@ open class TextView : View {
     open var text: CharSequence? = null
     var hint: CharSequence? = null
     var textSize: Float = 14f
-    var textColor: Int = 0
+    // No `textColor` property: the framework getter returns a ColorStateList while the setter
+    // takes an Int, so Kotlin does not synthesise a property — call setTextColor() instead.
+    fun setTextColor(color: Int) {}
     var gravity: Int = Gravity.NO_GRAVITY
     var typeface: Typeface? = null
     var maxLines: Int = Int.MAX_VALUE

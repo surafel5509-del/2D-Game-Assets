@@ -88,7 +88,7 @@ class InspectorView(private val context: Context) {
         val visible = CheckBox(context)
         visible.text = "Visible"
         visible.isChecked = node.visible
-        visible.textColor = Studio.TEXT
+        visible.setTextColor(Studio.TEXT)
         visible.textSize = 12f
         visible.setOnCheckedChangeListener { _, checked -> onEdit?.invoke(node, "visible", checked, true) }
         view.addView(visible)
@@ -127,7 +127,7 @@ class InspectorView(private val context: Context) {
         val box = CheckBox(context)
         box.isChecked = value
         box.text = if (value) "on" else "off"
-        box.textColor = Studio.TEXT
+        box.setTextColor(Studio.TEXT)
         box.textSize = 12f
         box.setOnCheckedChangeListener { button, checked ->
             button?.text = if (checked) "on" else "off"
@@ -302,7 +302,7 @@ class InspectorView(private val context: Context) {
         row.addView(caption)
         val value = TextView(context)
         value.text = valueText
-        value.textColor = Studio.TEXT
+        value.setTextColor(Studio.TEXT)
         value.textSize = 12f
         row.addView(value)
         if (action != null) {

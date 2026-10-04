@@ -226,7 +226,7 @@ class ScriptEditorPanel(private val context: Context, private val session: Studi
 
     private val tabs = LinearLayout(context).also { it.orientation = LinearLayout.HORIZONTAL }
     private val editor = EditText(context).also {
-        it.textColor = Studio.TEXT
+        it.setTextColor(Studio.TEXT)
         it.textSize = 12f
         it.typeface = Typeface.MONOSPACE
         it.setBackgroundColor(Studio.PANEL_ALT)
@@ -319,12 +319,12 @@ class ConsolePanel(private val context: Context, private val session: StudioSess
     private lateinit var outputScroll: ScrollView
 
     private val output = TextView(context).also {
-        it.textColor = Studio.TEXT
+        it.setTextColor(Studio.TEXT)
         it.textSize = 11f
         it.typeface = Typeface.MONOSPACE
     }
     private val stats = TextView(context).also {
-        it.textColor = Studio.TEXT_DIM
+        it.setTextColor(Studio.TEXT_DIM)
         it.textSize = 11f
         it.typeface = Typeface.MONOSPACE
     }
