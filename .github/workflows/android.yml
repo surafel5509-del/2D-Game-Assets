@@ -35,6 +35,9 @@ env:
   ANDROID_PLATFORM: 'android-36'
   ANDROID_BUILD_TOOLS: '36.0.0'
   ANDROID_EMULATOR_API: '30'
+  # A third device run uses a current Android version: the app targets API 36, and a phone
+  # in 2026 is far newer than the API 30 image the base runs use.
+  ANDROID_EMULATOR_MODERN_API: '34'
 
 jobs:
   # ---------------------------------------------------------------- engine core
@@ -288,15 +291,67 @@ jobs:
             build/emulator-report-release.md
           if-no-files-found: ignore
 
+  # Same release APK, current Android version: behaviour that only exists above API 30 (stricter
+  # background/clipboard/receiver rules, newer WebView, new permission model) is exercised here.
+  android-emulator-modern:
+    name: Install and run the release APK on a current Android
+    needs: android-apk
+    if: github.event_name != 'pull_request' && (github.event_name != 'workflow_dispatch' || inputs.emulator_smoke)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Locate the runner's Android SDK
+        run: |
+          SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          CMDLINE="$(ls -d "$SDK"/cmdline-tools/*/bin 2>/dev/null | sort -V | tail -1)"
+          {
+            echo "ANDROID_HOME=$SDK"
+            echo "ANDROID_SDK_ROOT=$SDK"
+            echo "PATH=$CMDLINE:$SDK/platform-tools:$SDK/emulator:$PATH"
+          } >> "$GITHUB_ENV"
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: lumen2d-studio-apk
+          path: build/apk
+
+      - name: Install and play the release APK on a headless emulator
+        run: |
+          APK="$(find build/apk -name '*-release.apk' | head -1)"
+          echo "verifying $APK on API ${ANDROID_EMULATOR_MODERN_API}"
+          tools/ci-emulator-smoke.sh "$APK" \
+            --package dev.lumen2d.studio \
+            --api "${ANDROID_EMULATOR_MODERN_API}" \
+            --report build/emulator-report-modern.md \
+            --shots ci-logs/emulator-shots-modern \
+            --shot-prefix modern-
+
+      - name: Upload the screenshots and the report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: lumen2d-device-screenshots-modern
+          path: |
+            ci-logs/emulator-shots-modern/
+            build/emulator-report-modern.md
+          if-no-files-found: ignore
+
   # ------------------------------------------------------------ verify and publish
   publish:
     name: Re-verify the artifacts and publish the release
-    needs: [ android-apk, android-emulator, android-emulator-release ]
+    needs: [ android-apk, android-emulator, android-emulator-release, android-emulator-modern ]
     if: |
       always() &&
       needs.android-apk.result == 'success' &&
       (needs.android-emulator.result == 'success' || needs.android-emulator.result == 'skipped') &&
       (needs.android-emulator-release.result == 'success' || needs.android-emulator-release.result == 'skipped') &&
+      (needs.android-emulator-modern.result == 'success' || needs.android-emulator-modern.result == 'skipped') &&
       github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -331,10 +386,15 @@ jobs:
           name: lumen2d-device-screenshots
           path: build/device
         continue-on-error: true
-      # The release run's files are prefixed, so both sets can share one directory.
+      # Both extra runs prefix their files, so every set can share one directory.
       - uses: actions/download-artifact@v8
         with:
           name: lumen2d-device-screenshots-release
+          path: build/device
+        continue-on-error: true
+      - uses: actions/download-artifact@v8
+        with:
+          name: lumen2d-device-screenshots-modern
           path: build/device
         continue-on-error: true
 
@@ -394,6 +454,7 @@ jobs:
             # instead of assuming where they landed: each device job publishes its own.
             for DEVICE_REPORT in $(find build/device -name 'emulator-report*.md' 2>/dev/null | sort); do
               case "$DEVICE_REPORT" in
+                *modern*) SUMMARY="On-device verification — release APK on Android ${ANDROID_EMULATOR_MODERN_API}" ;;
                 *release*) SUMMARY="On-device verification — release APK (minified)" ;;
                 *) SUMMARY="On-device verification — debug APK" ;;
               esac

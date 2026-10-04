@@ -125,6 +125,7 @@ verified.**
 | **Build and verify the Android APK** | SDK 36 assembles debug + release; both APKs pass the static verification below |
 | **Install and run the APK on an emulator** | a headless API 30 emulator installs the debug APK, the hub launches and lists all three bundled samples, playing one makes the engine log a scene load, and creating a project from **+ New project** reaches the studio without a fatal exception |
 | **Install and run the release APK on an emulator** | the same run for the R8-minified, resource-shrunk release APK — minification is whole-program, so the release build has to prove itself on a device too |
+| **Install and run the release APK on a current Android** | the release APK once more on a recent API level (`ANDROID_EMULATOR_MODERN_API`), because the base device runs use an old image and platform rules changed a lot since |
 | **Re-verify the artifacts and publish the release** | the *uploaded* APKs are downloaded and verified again independently, then published as the rolling `latest-build` release with checksums, both verification reports and the device report in the notes, and the emulator screenshots as release assets |
 
 Every build step runs through `tools/ci-run.sh`, which tees its output to `ci-logs/` (uploaded as an
@@ -174,8 +175,9 @@ It needs `adb`, `emulator` and `avdmanager` plus `/dev/kvm`; it puts the SDK's o
 records a *skipped* report and exits 0 — a shared runner cannot be blamed for a missing device. The
 checks are listed in the report table and the screenshots land in `--shots`.
 
-CI runs it twice, once per APK (debug and release), in parallel jobs; `--shot-prefix release-` keeps
-the second run's files from overwriting the first run's.
+CI runs it three times in parallel — debug on API 30, release on API 30, release on a current API
+level — and `--shot-prefix` keeps each run's files from overwriting another run's (they share the
+workspace and the release).
 
 The test drives the real UI, so it locates controls with `dumpsys window` (a focused activity),
 `uiautomator dump` and `tools/ui_dump.py find <dump.xml> <label>` (which prefers an exact, clickable,
