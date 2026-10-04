@@ -348,8 +348,14 @@ else
 fi
 
 # ---------------------------------------------------- run a game for real
-# Tap Play and wait for the studio. The tap may land on a stale layout (or on a title that
-# merely contains "play"), so the coordinates are re-read from a fresh dump before retrying.
+# Tap Play, then wait for the studio. Two traps here: "Pixel Platformer" also contains "play",
+# and a screen running a game never becomes idle, so uiautomator refuses to dump it. The focused
+# *window* is the reliable signal — the same one `dumpsys` reports for the hub — and the engine's
+# own log line is the proof that it really loaded a game.
+focused_window() {
+  adb shell dumpsys window 2>/dev/null | grep -m1 -E 'mCurrentFocus|mFocusedApp' | tr -d '\r'
+}
+
 TAP=""
 opened=no
 for attempt in 1 2; do
@@ -359,8 +365,7 @@ for attempt in 1 2; do
   adb shell input tap $TAP > /dev/null 2>&1 || true
   for _ in $(seq 1 8); do
     sleep 5
-    dump_screen "$WORK/editor.xml" "$WORK/editor-texts.txt"
-    if grep -qE "Inspector|Console|Assets|Scripts" "$WORK/editor-texts.txt"; then
+    if focused_window | grep -q "StudioActivity"; then
       opened=yes
       break 2
     fi
@@ -371,10 +376,11 @@ done
 if [ -z "$TAP" ]; then
   record "ui.play-control" no "no Play control was found in the hub dump"
   failures=$((failures + 1))
+  annotate_ui_evidence
 elif [ "$opened" = yes ]; then
-  record "editor.open" yes "the studio opened the sample project (tapped Play at $TAP)"
+  record "editor.open" yes "Play opened the studio — $(focused_window | cut -c1-140)"
 else
-  record "editor.open" no "the studio panes never appeared after tapping Play at $TAP"
+  record "editor.open" no "tapping Play at $TAP never reached the studio — $(focused_window | cut -c1-140)"
   failures=$((failures + 1))
   annotate_ui_evidence
 fi
@@ -383,10 +389,14 @@ if [ "$opened" = yes ]; then
   adb exec-out screencap -p > "$SHOTS/editor.png" 2>/dev/null || true
   [ -s "$SHOTS/editor.png" ] && record "editor.screenshot" yes "$(wc -c < "$SHOTS/editor.png") bytes → ci-logs/emulator-shots/editor.png"
 
-  # Playing also has to reach the engine: its own log line proves a scene was loaded on device.
-  sleep 5
-  adb logcat -d -v brief > "$ROOT/ci-logs/logcat-after-play.txt" 2>/dev/null || true
-  SCENE_LINE="$(grep -E "Scene '?[^']*'? loaded" "$ROOT/ci-logs/logcat-after-play.txt" | tail -1)"
+  # Playing has to reach the engine: its own log line proves a scene was loaded on the device.
+  SCENE_LINE=""
+  for _ in $(seq 1 6); do
+    sleep 5
+    adb logcat -d -v brief > "$ROOT/ci-logs/logcat-after-play.txt" 2>/dev/null || true
+    SCENE_LINE="$(grep -E "Scene '?[^']*'? loaded" "$ROOT/ci-logs/logcat-after-play.txt" | tail -1)"
+    [ -n "$SCENE_LINE" ] && break
+  done
   if [ -n "$SCENE_LINE" ]; then
     record "engine.scene" yes "${SCENE_LINE:0:150}"
   else
