@@ -1,0 +1,157 @@
+# Pixel Platformer — the whole game loop in one script.
+export var speed = 105.0
+export var jump_force = 320.0
+var total_coins = 9
+var coins_found = 0
+var health = 1.0
+var facing = 1.0
+var coyote = 0.0
+var jump_buffer = 0.0
+var invulnerable = 0.0
+var slime_direction = -1.0
+var won = false
+
+func ready() {
+    print("Collect the coins and reach the flag.")
+}
+
+func physics_process(delta) {
+    var player = get_node("Player")
+    var sprite = get_node("Player/Sprite")
+
+    if won {
+        player.velocity.x = 0.0
+        player.move_and_slide(delta)
+        return
+    }
+
+    # --- horizontal movement
+    var axis = input.axis("move")
+    if abs(axis.x) > 0.15 {
+        facing = sign(axis.x)
+        sprite.flipX = facing < 0.0
+    }
+    player.velocity.x = axis.x * speed
+
+    # --- jump with coyote time and input buffering
+    if player.on_floor {
+        coyote = 0.1
+        if abs(axis.x) > 0.15 {
+            sprite.set_frame(6.0)
+        } else {
+            sprite.set_frame(0.0)
+        }
+    } else {
+        coyote = max(0.0, coyote - delta)
+        sprite.set_frame(4.0)
+    }
+    if input.just_pressed("jump") {
+        jump_buffer = 0.12
+    } else {
+        jump_buffer = max(0.0, jump_buffer - delta)
+    }
+    if jump_buffer > 0.0 and coyote > 0.0 {
+        player.velocity.y = -jump_force
+        jump_buffer = 0.0
+        coyote = 0.0
+        play_sound("lib://packs/base/audio/jump.wav")
+        var dust = get_node("Dust")
+        dust.position = player.position
+        dust.set("emitting", true)
+        set_timer(0.25, "stop_dust")
+    }
+
+    # --- gravity, then move the body through the world
+    if not player.on_floor {
+        player.velocity.y = min(player.velocity.y + 900.0 * delta, 480.0)
+    }
+    player.move_and_slide(delta)
+
+    if player.position.y > 300.0 {
+        hurt(0.34)
+        player.position = vec2(48.0, 200.0)
+        player.velocity = vec2(0.0, 0.0)
+    }
+
+    update_coins()
+    update_slime(delta)
+    update_goal()
+}
+
+func process(delta) {
+    invulnerable = max(0.0, invulnerable - delta)
+}
+
+func stop_dust() {
+    get_node("Dust").set("emitting", false)
+}
+
+func update_coins() {
+    var player = get_node("Player")
+    for coin in find_children("Coin*", "*", true) {
+        if coin.is_in_group("coin") and coin.visible {
+            if coin.global_position.distance_to(player.global_position) < 14.0 {
+                coin.visible = false
+                coins_found += 1
+                play_sound("lib://packs/base/audio/coin.wav")
+                get_node("UI/HUD/CoinBar").set_count(coins_found, total_coins)
+                if coins_found >= total_coins {
+                    show_banner("ALL COINS FOUND!")
+                }
+            }
+        }
+    }
+}
+
+func update_slime(delta) {
+    var slime = get_node("Slime")
+    var player = get_node("Player")
+    slime.position.x += slime_direction * 30.0 * delta
+    if slime.position.x < 352.0 or slime.position.x > 460.0 {
+        slime_direction = -slime_direction
+    }
+    if abs(slime.position.x - player.position.x) < 14.0 and abs(slime.position.y - player.position.y) < 20.0 {
+        hurt(0.34)
+        player.velocity.y = -170.0
+    }
+}
+
+func hurt(amount) {
+    if invulnerable > 0.0 {
+        return
+    }
+    health = max(0.0, health - amount)
+    invulnerable = 1.0
+    get_node("UI/HUD/Hearts").set_value(health)
+    play_sound("lib://packs/base/audio/hurt.wav")
+    flash(get_node("Player"), 0.25)
+    if health <= 0.0 {
+        health = 1.0
+        get_node("UI/HUD/Hearts").set_value(1.0)
+        get_node("Player").position = vec2(48.0, 200.0)
+        show_banner("OUCH! BACK TO THE START")
+    }
+}
+
+func update_goal() {
+    if won {
+        return
+    }
+    var player = get_node("Player")
+    var goal = get_node("Goal")
+    if abs(player.position.x - goal.position.x) < 18.0 {
+        won = true
+        show_banner("LEVEL CLEAR!  coins " + str(coins_found) + "/" + str(total_coins))
+        play_sound("lib://packs/base/audio/pickup.wav")
+        shake_camera(3.0, 0.4)
+    }
+}
+
+func show_banner(text) {
+    get_node("UI/HUD/Banner").text = text
+    set_timer(3.0, "clear_banner")
+}
+
+func clear_banner() {
+    get_node("UI/HUD/Banner").text = ""
+}

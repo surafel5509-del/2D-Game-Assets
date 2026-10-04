@@ -1,0 +1,33 @@
+{
+  "id": "base",
+  "name": "Lumen2D Base",
+  "description": "Starter pixel-art kit: characters, terrain, UI, particles, font and sound.",
+  "version": "1.0.0",
+  "license": "CC0-1.0",
+  "author": "Lumen2D contributors",
+  "engine": "1.0.0",
+  "tags": [
+    "pixel-art",
+    "16x16",
+    "starter"
+  ],
+  "files": [
+    "audio/blip.wav",
+    "audio/coin.wav",
+    "audio/hurt.wav",
+    "audio/jump.wav",
+    "audio/pickup.wav",
+    "fonts/pixel8.font.json",
+    "fonts/pixel8.png",
+    "fx/hills.png",
+    "fx/spark.png",
+    "sprites/coin.png",
+    "sprites/flag.png",
+    "sprites/player.png",
+    "sprites/slime.png",
+    "tiles/tileset.png",
+    "ui/button.png",
+    "ui/coin_icon.png",
+    "ui/panel.png"
+  ]
+}

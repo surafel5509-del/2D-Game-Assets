@@ -1,0 +1,33 @@
+# --- build output ---------------------------------------------------------
+out/
+build/
+.gradle/
+.gradle-cache/
+*.class
+*.jar
+!gradle/wrapper/gradle-wrapper.jar
+
+# --- local toolchain (recreated by tools/bootstrap-toolchain.sh) ----------
+.toolchain/
+local.properties
+
+# --- android --------------------------------------------------------------
+*.apk
+*.aab
+*.ap_
+*.dex
+.cxx/
+app-android/release/
+
+# --- CI helper output (tools/ci-run.sh) -----------------------------------
+ci-logs/
+
+# --- editor / OS noise ----------------------------------------------------
+.idea/
+*.iml
+.DS_Store
+Thumbs.db
+.vscode/
+
+# --- generated previews keep their sources, not the frames ----------------
+docs/preview/generated/frames/

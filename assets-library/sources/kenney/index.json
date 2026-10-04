@@ -1,0 +1,46 @@
+{
+  "format": "lumen2d.asset-sources",
+  "version": 1,
+  "engine": "1.0.0",
+  "pack": "kenney",
+  "name": "Kenney Pixel Platformer",
+  "description": "CC0 pixel-art platformer kit (18x18 tiles + characters) imported from the vendored Kenney archive.",
+  "license": "CC0-1.0",
+  "author": "Kenney (www.kenney.nl)",
+  "fileCount": 2,
+  "files": [
+    {
+      "path": "sprites/characters.png",
+      "origin": "imported",
+      "recipe": "Tilemap/tilemap-characters_packed.png",
+      "source": "assets-library/sources/kenney-pixel-platformer/tilemap-characters_packed.png",
+      "license": "CC0-1.0",
+      "author": "Kenney (www.kenney.nl)",
+      "importSettings": {
+        "frameWidth": 18,
+        "frameHeight": 18,
+        "columns": 12,
+        "rows": 4,
+        "source": "Tilemap/tilemap-characters_packed.png"
+      },
+      "notes": "Republished from the vendored archive (see sources.json for hashes)."
+    },
+    {
+      "path": "tiles/tileset.png",
+      "origin": "imported",
+      "recipe": "Tilemap/tilemap_packed.png",
+      "source": "assets-library/sources/kenney-pixel-platformer/tilemap_packed.png",
+      "license": "CC0-1.0",
+      "author": "Kenney (www.kenney.nl)",
+      "importSettings": {
+        "tileWidth": 18,
+        "tileHeight": 18,
+        "columns": 20,
+        "rows": 9,
+        "spacing": 0,
+        "source": "Tilemap/tilemap_packed.png"
+      },
+      "notes": "Republished from the vendored archive (see sources.json for hashes)."
+    }
+  ]
+}

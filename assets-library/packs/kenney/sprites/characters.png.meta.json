@@ -1,0 +1,18 @@
+{
+  "displayName": "Characters (Kenney)",
+  "tags": [
+    "character",
+    "kenney"
+  ],
+  "license": "CC0-1.0",
+  "author": "Kenney (www.kenney.nl)",
+  "source": "Kenney Pixel Platformer source archive",
+  "sourceUrl": "https://kenney.nl/assets/pixel-platformer",
+  "importSettings": {
+    "frameWidth": 18,
+    "frameHeight": 18,
+    "columns": 12,
+    "rows": 4,
+    "source": "Tilemap/tilemap-characters_packed.png"
+  }
+}

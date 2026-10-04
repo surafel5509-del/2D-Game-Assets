@@ -1,0 +1,16 @@
+{
+  "displayName": "Player",
+  "tags": [
+    "character",
+    "player"
+  ],
+  "license": "CC0-1.0",
+  "author": "Lumen2D contributors",
+  "source": "Lumen2D generated asset library",
+  "sourceUrl": "https://github.com/",
+  "importSettings": {
+    "frameWidth": 16,
+    "frameHeight": 20,
+    "columns": 4
+  }
+}

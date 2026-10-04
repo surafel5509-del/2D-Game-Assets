@@ -1,0 +1,492 @@
+name: Lumen2D Engine CI
+
+# Engine core tests, generated content freshness, the Android APK build, and — the part
+# that matters for a shippable engine — verification of the artifact: static verification
+# of the APK's contents plus an emulator run that installs it and plays a bundled sample.
+#
+# Every build step runs through tools/ci-run.sh, which turns failures into annotations and
+# a step summary, so a red run is diagnosable from the run page itself.
+
+on:
+  push:
+    branches: [ main, 'arena/**' ]
+    tags: [ 'v*' ]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      publish_release:
+        description: 'Publish/refresh the "latest-build" release with the verified APKs'
+        type: boolean
+        default: true
+      emulator_smoke:
+        description: 'Install and run the APK on an Android emulator'
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GRADLE_VERSION: '8.14.3'
+  ANDROID_PLATFORM: 'android-36'
+  ANDROID_BUILD_TOOLS: '36.0.0'
+  ANDROID_EMULATOR_API: '30'
+  # A third device run uses a current Android version: the app targets API 36, and a phone
+  # in 2026 is far newer than the API 30 image the base runs use.
+  ANDROID_EMULATOR_MODERN_API: '34'
+
+jobs:
+  # ---------------------------------------------------------------- engine core
+  engine-core:
+    name: Engine core tests (JVM)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: '8.14.3'
+      - name: Run the engine-core test suite
+        run: tools/ci-run.sh --name engine-tests gradle :engine-core:engineTests --stacktrace
+      - name: Upload failure logs
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ci-logs-engine-core
+          path: ci-logs/
+          if-no-files-found: ignore
+
+  # ------------------------------------------------------------- generated content
+  engine-content:
+    name: Asset library, samples and previews
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: '8.14.3'
+
+      - name: Regenerate the asset library and the sample games
+        run: tools/ci-run.sh --name export-content gradle :engine-desktop:exportContent --stacktrace
+
+      - name: Check that the committed content matches the engine
+        run: |
+          if ! git diff --exit-code -- assets-library sample-games; then
+            echo "::error title=Generated content is stale::The committed assets-library/sample-games differ from the engine's output. Run 'gradle :engine-desktop:exportContent' and commit the result."
+            git --no-pager diff --stat -- assets-library sample-games
+            exit 1
+          fi
+          echo "committed content matches the engine output"
+
+      - name: Headless smoke check of every sample game
+        run: tools/ci-run.sh --name sample-checks gradle :engine-desktop:checkSamples --stacktrace
+
+      - name: Render the preview screenshots
+        run: tools/ci-run.sh --name previews gradle :engine-desktop:run --args="--demo all --out build/preview"
+
+      - name: Self-test the APK verifier (no SDK required)
+        run: tools/ci-run.sh --name apk-verifier-selftest tools/verify-apk-selftest.sh
+
+      - name: Upload the rendered previews
+        uses: actions/upload-artifact@v7
+        with:
+          name: desktop-renderer-preview
+          path: engine-desktop/build/preview
+          if-no-files-found: error
+      - name: Upload failure logs
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ci-logs-engine-content
+          path: ci-logs/
+          if-no-files-found: ignore
+
+  # ------------------------------------------------------------------- Android APK
+  android-apk:
+    name: Build and verify the Android APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: '8.14.3'
+
+      - name: Locate the runner's Android SDK
+        run: |
+          SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          CMDLINE="$(ls -d "$SDK"/cmdline-tools/*/bin 2>/dev/null | sort -V | tail -1)"
+          if [ -z "$CMDLINE" ]; then
+            echo "::error title=Android SDK::cmdline-tools not found under $SDK"
+            ls -la "$SDK" || true
+            exit 1
+          fi
+          {
+            echo "ANDROID_HOME=$SDK"
+            echo "ANDROID_SDK_ROOT=$SDK"
+            echo "PATH=$CMDLINE:$SDK/platform-tools:$SDK/emulator:$PATH"
+          } >> "$GITHUB_ENV"
+          echo "sdk.dir=$SDK" > local.properties
+          "$CMDLINE/sdkmanager" --version
+
+      - name: Install the SDK packages the build needs
+        run: |
+          yes | sdkmanager --licenses > /dev/null || true
+          tools/ci-run.sh --name sdk-packages sdkmanager --install \
+            "platforms;${ANDROID_PLATFORM}" "build-tools;${ANDROID_BUILD_TOOLS}" "platform-tools"
+
+      - name: Create the keystore used to sign the release build
+        run: |
+          mkdir -p "$HOME/.android"
+          if [ ! -f "$HOME/.android/debug.keystore" ]; then
+            keytool -genkeypair -v -keystore "$HOME/.android/debug.keystore" \
+              -storepass android -keypass android -alias androiddebugkey \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US"
+          fi
+
+      - name: Assemble the debug and release APKs
+        run: tools/ci-run.sh --name assemble gradle :app-android:assembleDebug :app-android:assembleRelease --stacktrace
+
+      - name: Verify the debug APK
+        run: tools/verify-apk.sh app-android/build/outputs/apk/debug/*.apk --expect debug --report build/apk-report-debug.md
+
+      - name: Verify the release APK
+        run: tools/verify-apk.sh app-android/build/outputs/apk/release/*.apk --expect release --report build/apk-report-release.md
+
+      - name: List the artifacts
+        run: |
+          ls -lh app-android/build/outputs/apk/debug/*.apk app-android/build/outputs/apk/release/*.apk
+          find app-android/build/engine-content -maxdepth 2 -mindepth 1 | sort
+
+      - name: Upload the APKs, the verification reports and the logs
+        uses: actions/upload-artifact@v7
+        with:
+          name: lumen2d-studio-apk
+          path: |
+            app-android/build/outputs/apk/debug/*.apk
+            app-android/build/outputs/apk/release/*.apk
+            build/apk-report-*.md
+            ci-logs/
+          if-no-files-found: error
+
+  # --------------------------------------------------------------- on-device check
+  android-emulator:
+    name: Install and run the APK on an emulator
+    needs: android-apk
+    # `inputs.x != false` would skip the job on push events (null coerces to false), so the
+    # manual input is only consulted for workflow_dispatch runs.
+    if: github.event_name != 'pull_request' && (github.event_name != 'workflow_dispatch' || inputs.emulator_smoke)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Locate the runner's Android SDK
+        run: |
+          SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          CMDLINE="$(ls -d "$SDK"/cmdline-tools/*/bin 2>/dev/null | sort -V | tail -1)"
+          {
+            echo "ANDROID_HOME=$SDK"
+            echo "ANDROID_SDK_ROOT=$SDK"
+            echo "PATH=$CMDLINE:$SDK/platform-tools:$SDK/emulator:$PATH"
+          } >> "$GITHUB_ENV"
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: lumen2d-studio-apk
+          path: build/apk
+
+      - name: Install and play the debug APK on a headless emulator
+        run: |
+          APK="$(find build/apk -name '*-debug.apk' | head -1)"
+          echo "verifying $APK"
+          tools/ci-emulator-smoke.sh "$APK" \
+            --package dev.lumen2d.studio.debug \
+            --api "${ANDROID_EMULATOR_API}" \
+            --report build/emulator-report.md \
+            --shots ci-logs/emulator-shots
+
+      - name: Upload the device screenshots and the report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: lumen2d-device-screenshots
+          path: |
+            ci-logs/emulator-shots/
+            build/emulator-report.md
+            ci-logs/logcat*.txt
+            ci-logs/emulator.log
+          if-no-files-found: ignore
+
+  # The release APK is R8-minified and resource-shrunk, so it is not the same code the debug job
+  # drives. It gets the same on-device run — in parallel, so the pipeline does not get longer.
+  android-emulator-release:
+    name: Install and run the release APK on an emulator
+    needs: android-apk
+    if: github.event_name != 'pull_request' && (github.event_name != 'workflow_dispatch' || inputs.emulator_smoke)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Locate the runner's Android SDK
+        run: |
+          SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          CMDLINE="$(ls -d "$SDK"/cmdline-tools/*/bin 2>/dev/null | sort -V | tail -1)"
+          {
+            echo "ANDROID_HOME=$SDK"
+            echo "ANDROID_SDK_ROOT=$SDK"
+            echo "PATH=$CMDLINE:$SDK/platform-tools:$SDK/emulator:$PATH"
+          } >> "$GITHUB_ENV"
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: lumen2d-studio-apk
+          path: build/apk
+
+      - name: Install and play the release APK on a headless emulator
+        run: |
+          APK="$(find build/apk -name '*-release.apk' | head -1)"
+          echo "verifying $APK"
+          tools/ci-emulator-smoke.sh "$APK" \
+            --package dev.lumen2d.studio \
+            --api "${ANDROID_EMULATOR_API}" \
+            --report build/emulator-report-release.md \
+            --shots ci-logs/emulator-shots-release \
+            --shot-prefix release-
+
+      - name: Upload the release screenshots and the report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: lumen2d-device-screenshots-release
+          path: |
+            ci-logs/emulator-shots-release/
+            build/emulator-report-release.md
+          if-no-files-found: ignore
+
+  # Same release APK, current Android version: behaviour that only exists above API 30 (stricter
+  # background/clipboard/receiver rules, newer WebView, new permission model) is exercised here.
+  android-emulator-modern:
+    name: Install and run the release APK on a current Android
+    needs: android-apk
+    if: github.event_name != 'pull_request' && (github.event_name != 'workflow_dispatch' || inputs.emulator_smoke)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Locate the runner's Android SDK
+        run: |
+          SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          CMDLINE="$(ls -d "$SDK"/cmdline-tools/*/bin 2>/dev/null | sort -V | tail -1)"
+          {
+            echo "ANDROID_HOME=$SDK"
+            echo "ANDROID_SDK_ROOT=$SDK"
+            echo "PATH=$CMDLINE:$SDK/platform-tools:$SDK/emulator:$PATH"
+          } >> "$GITHUB_ENV"
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: lumen2d-studio-apk
+          path: build/apk
+
+      - name: Install and play the release APK on a headless emulator
+        run: |
+          APK="$(find build/apk -name '*-release.apk' | head -1)"
+          echo "verifying $APK on API ${ANDROID_EMULATOR_MODERN_API}"
+          tools/ci-emulator-smoke.sh "$APK" \
+            --package dev.lumen2d.studio \
+            --api "${ANDROID_EMULATOR_MODERN_API}" \
+            --report build/emulator-report-modern.md \
+            --shots ci-logs/emulator-shots-modern \
+            --shot-prefix modern-
+
+      - name: Upload the screenshots and the report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: lumen2d-device-screenshots-modern
+          path: |
+            ci-logs/emulator-shots-modern/
+            build/emulator-report-modern.md
+          if-no-files-found: ignore
+
+  # ------------------------------------------------------------ verify and publish
+  publish:
+    name: Re-verify the artifacts and publish the release
+    needs: [ android-apk, android-emulator, android-emulator-release, android-emulator-modern ]
+    if: |
+      always() &&
+      needs.android-apk.result == 'success' &&
+      (needs.android-emulator.result == 'success' || needs.android-emulator.result == 'skipped') &&
+      (needs.android-emulator-release.result == 'success' || needs.android-emulator-release.result == 'skipped') &&
+      (needs.android-emulator-modern.result == 'success' || needs.android-emulator-modern.result == 'skipped') &&
+      github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Locate the runner's Android SDK
+        run: |
+          SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          CMDLINE="$(ls -d "$SDK"/cmdline-tools/*/bin 2>/dev/null | sort -V | tail -1)"
+          {
+            echo "ANDROID_HOME=$SDK"
+            echo "PATH=$CMDLINE:$SDK/platform-tools:$PATH"
+          } >> "$GITHUB_ENV"
+          echo "sdk.dir=$SDK" > local.properties
+
+      - name: Install build-tools for the re-verification
+        run: |
+          yes | sdkmanager --licenses > /dev/null || true
+          tools/ci-run.sh --name sdk-packages-verify sdkmanager --install "build-tools;${ANDROID_BUILD_TOOLS}" "platform-tools"
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: lumen2d-studio-apk
+          path: build/apk
+      - uses: actions/download-artifact@v8
+        with:
+          name: lumen2d-device-screenshots
+          path: build/device
+        continue-on-error: true
+      # Both extra runs prefix their files, so every set can share one directory.
+      - uses: actions/download-artifact@v8
+        with:
+          name: lumen2d-device-screenshots-release
+          path: build/device
+        continue-on-error: true
+      - uses: actions/download-artifact@v8
+        with:
+          name: lumen2d-device-screenshots-modern
+          path: build/device
+        continue-on-error: true
+
+      - name: Re-verify the downloaded APKs (independent of the build job)
+        run: |
+          set -e
+          mkdir -p build
+          DEBUG_APK="$(find build/apk -name '*-debug.apk' | head -1)"
+          RELEASE_APK="$(find build/apk -name '*-release.apk' | head -1)"
+          test -n "$DEBUG_APK" -a -n "$RELEASE_APK" || { echo "::error title=Publish::the uploaded artifact does not contain both APKs"; exit 1; }
+          tools/verify-apk.sh "$DEBUG_APK" --expect debug --report build/recheck-debug.md
+          tools/verify-apk.sh "$RELEASE_APK" --expect release --report build/recheck-release.md
+          sha256sum "$DEBUG_APK" "$RELEASE_APK" | tee build/apk-sha256.txt
+
+      - name: Publish the rolling release
+        if: github.ref_type == 'tag' || startsWith(github.ref, 'refs/heads/') && (github.ref_name == 'main' || startsWith(github.ref_name, 'arena/'))
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.publish_release }}" = "false" ]; then
+            echo "release publishing disabled for this manual run"; exit 0
+          fi
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            TAG="${GITHUB_REF_NAME}"; PRERELEASE=""; TITLE="Lumen2D Studio ${GITHUB_REF_NAME}"
+          else
+            TAG="latest-build"; PRERELEASE="--prerelease"; TITLE="Lumen2D Studio — latest build"
+          fi
+          {
+            echo "### Lumen2D Studio — Android 2D game engine & editor"
+            echo
+            echo "Built from commit \`${GITHUB_SHA}\` by [Lumen2D Engine CI](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID})."
+            echo
+            echo "Install \`app-android-debug.apk\` (debug-signed, also used for the on-device smoke test)"
+            echo "or \`app-android-release.apk\` (R8-minified) on Android 7.0+ (API 24). Both APKs are"
+            echo "verified before publishing: the checks below run against the uploaded artifacts, and"
+            echo "the debug APK is installed and played on an emulator."
+            echo
+            echo "### Checksums"
+            echo
+            echo '```'
+            cat build/apk-sha256.txt
+            echo '```'
+            echo
+            echo "<details><summary>Static verification — debug APK</summary>"
+            echo
+            cat build/recheck-debug.md
+            echo
+            echo "</details>"
+            echo
+            echo "<details><summary>Static verification — release APK</summary>"
+            echo
+            cat build/recheck-release.md
+            echo
+            echo "</details>"
+            # The artifacts unpack with the paths they were uploaded from, so look for the reports
+            # instead of assuming where they landed: each device job publishes its own.
+            for DEVICE_REPORT in $(find build/device -name 'emulator-report*.md' 2>/dev/null | sort); do
+              case "$DEVICE_REPORT" in
+                *modern*) SUMMARY="On-device verification — release APK on Android ${ANDROID_EMULATOR_MODERN_API}" ;;
+                *release*) SUMMARY="On-device verification — release APK (minified)" ;;
+                *) SUMMARY="On-device verification — debug APK" ;;
+              esac
+              echo "<details><summary>$SUMMARY</summary>"
+              echo
+              cat "$DEVICE_REPORT"
+              echo
+              echo "</details>"
+              echo
+            done
+            # Every screenshot either device job produced is uploaded below, so the notes show all
+            # of them without anyone maintaining a list.
+            for shot in $(find build/device -name '*.png' 2>/dev/null | sort); do
+              name="device-$(basename "$shot")"
+              echo "![${name%.png}](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/download/${TAG}/${name})"
+              echo
+            done
+          } > build/release-notes.md
+
+          gh release view "$TAG" > /dev/null 2>&1 || \
+            gh release create "$TAG" --title "$TITLE" $PRERELEASE --notes-file build/release-notes.md
+          gh release edit "$TAG" --title "$TITLE" --notes-file build/release-notes.md
+          gh release upload "$TAG" $(find build/apk -name '*.apk' | tr '\n' ' ') --clobber
+
+          # The on-device screenshots are the visual proof that the APK ran on a device; ship them
+          # with the release so they can be looked at without digging through workflow artifacts.
+          mkdir -p build/release
+          for shot in $(find build/device -name '*.png' 2>/dev/null); do
+            cp "$shot" "build/release/device-$(basename "$shot")"
+          done
+          SHOTS="$(find build/release -name 'device-*.png' | tr '\n' ' ')"
+          if [ -n "$SHOTS" ]; then
+            gh release upload "$TAG" $SHOTS --clobber
+          fi
+          gh release view "$TAG" --json assets --jq '.assets[] | "\(.name)  \(.size) bytes"'

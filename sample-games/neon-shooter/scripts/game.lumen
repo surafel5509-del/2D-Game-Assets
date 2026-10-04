@@ -1,0 +1,131 @@
+# Neon Shooter — waves, bullets, particles and a score.
+export var speed = 150.0
+export var fire_delay = 0.22
+var score = 0
+var lives = 3
+var fire_timer = 0.0
+var spawn_timer = 0.8
+var elapsed = 0.0
+var game_over = false
+
+func ready() {
+    print("Neon Shooter ready — hold SPACE to fire.")
+}
+
+func process(delta) {
+    if game_over {
+        if input.just_pressed("fire") or input.just_pressed("jump") {
+            restart()
+        }
+        return
+    }
+    elapsed += delta
+
+    # --- steering
+    var ship = get_node("Ship")
+    var axis = input.axis("move")
+    ship.position.x = clamp(ship.position.x + axis.x * speed * delta, 16.0, 464.0)
+    ship.position.y = clamp(ship.position.y - axis.y * speed * 0.6 * delta, 120.0, 240.0)
+
+    # --- shooting
+    fire_timer -= delta
+    if input.pressed("fire") and fire_timer <= 0.0 {
+        fire_timer = fire_delay
+        shoot(ship.position)
+    }
+
+    move_bullets(delta)
+    move_enemies(delta)
+
+    # --- waves get denser over time
+    spawn_timer -= delta
+    if spawn_timer <= 0.0 {
+        spawn_timer = max(0.3, 1.1 - elapsed * 0.02)
+        spawn_enemy()
+    }
+}
+
+func shoot(from) {
+    var bullet = spawn("scenes/prefabs/bullet.scene.json", vec2(from.x, from.y - 12.0))
+    if bullet != null {
+        bullet.velocity = vec2(0.0, -260.0)
+    }
+    var muzzle = get_node("Muzzle")
+    muzzle.position = vec2(from.x, from.y - 14.0)
+    muzzle.set("emitting", true)
+    set_timer(0.08, "stop_muzzle")
+    play_sound("lib://packs/base/audio/blip.wav", 0.4)
+}
+
+func stop_muzzle() {
+    get_node("Muzzle").set("emitting", false)
+}
+
+func spawn_enemy() {
+    var enemy = spawn("scenes/prefabs/enemy.scene.json", vec2(16.0 + randf() * 448.0, -10.0))
+    if enemy != null {
+        enemy.fps = 3.0 + elapsed * 0.05
+    }
+}
+
+func move_enemies(delta) {
+    for enemy in find_children("Enemy", "*", true) {
+        if not enemy.is_in_group("enemy") {
+            continue
+        }
+        enemy.position.y += (55.0 + elapsed * 3.0) * delta
+        if enemy.position.y > 288.0 {
+            enemy.queue_free()
+            hurt()
+        }
+    }
+}
+
+func move_bullets(delta) {
+    for bullet in find_children("Bullet", "*", true) {
+        bullet.move_and_slide(delta)
+        if bullet.position.y < -10.0 {
+            bullet.queue_free()
+            continue
+        }
+        if hit_enemy(bullet) {
+            bullet.queue_free()
+            score += 10
+            get_node("UI/HUD/Score").text = "SCORE " + str(score)
+            play_sound("lib://packs/base/audio/pickup.wav", 0.6)
+        }
+    }
+}
+
+func hit_enemy(bullet) {
+    for enemy in find_children("Enemy", "*", true) {
+        if enemy.visible and enemy.position.distance_to(bullet.position) < 14.0 {
+            enemy.queue_free()
+            return true
+        }
+    }
+    return false
+}
+
+func hurt() {
+    lives -= 1
+    get_node("UI/HUD/Lives").set_count(lives, 3)
+    play_sound("lib://packs/base/audio/hurt.wav")
+    shake_camera(3.0, 0.25)
+    if lives <= 0 {
+        game_over = true
+        get_node("UI/HUD/Score").text = "GAME OVER - SCORE " + str(score) + " - PRESS SPACE"
+    }
+}
+
+func restart() {
+    score = 0
+    lives = 3
+    elapsed = 0.0
+    game_over = false
+    get_node("UI/HUD/Score").text = "SCORE 0"
+    get_node("UI/HUD/Lives").set_count(3, 3)
+    for enemy in find_children("Enemy", "*", true) {
+        enemy.queue_free()
+    }
+}

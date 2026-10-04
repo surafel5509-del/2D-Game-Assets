@@ -1,0 +1,89 @@
+{
+  "format": "lumen2d.scene",
+  "version": 1,
+  "name": "Main Menu",
+  "root": {
+    "type": "Node2D",
+    "name": "Main Menu",
+    "children": [
+      {
+        "type": "Node2D",
+        "name": "Environment",
+        "children": [
+          {
+            "type": "Sprite2D",
+            "name": "Backdrop",
+            "properties": {
+              "textureId": "lib://packs/base/fx/hills.png",
+              "color": "#8C99E5",
+              "position": [
+                240,
+                190
+              ],
+              "modulate": "#8C99E5"
+            }
+          }
+        ]
+      },
+      {
+        "type": "Node2D",
+        "name": "Gameplay"
+      },
+      {
+        "type": "Node2D",
+        "name": "UI",
+        "children": [
+          {
+            "type": "CanvasLayer",
+            "name": "Menu",
+            "children": [
+              {
+                "type": "Label",
+                "name": "Title",
+                "properties": {
+                  "text": "PIXEL PLATFORMER",
+                  "align": "CENTER",
+                  "anchorRight": 1,
+                  "offsetTop": 70,
+                  "minSize": [
+                    480,
+                    20
+                  ]
+                }
+              },
+              {
+                "type": "Label",
+                "name": "Hint",
+                "properties": {
+                  "text": "start a level, collect the coins, reach the flag",
+                  "align": "CENTER",
+                  "anchorRight": 1,
+                  "offsetTop": 96,
+                  "minSize": [
+                    480,
+                    12
+                  ]
+                }
+              },
+              {
+                "type": "TouchButton",
+                "name": "Start",
+                "properties": {
+                  "action": "ui_accept",
+                  "label": "START",
+                  "round": false,
+                  "anchorLeft": 0.5,
+                  "anchorRight": 0.5,
+                  "offsetLeft": -48,
+                  "offsetTop": 140,
+                  "offsetRight": 48,
+                  "offsetBottom": 164
+                }
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

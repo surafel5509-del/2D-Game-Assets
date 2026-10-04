@@ -1,0 +1,16 @@
+{
+  "displayName": "Pixel 8 atlas",
+  "tags": [
+    "font",
+    "bitmap",
+    "atlas"
+  ],
+  "license": "CC0-1.0",
+  "author": "Lumen2D contributors",
+  "source": "Lumen2D generated asset library",
+  "sourceUrl": "https://github.com/",
+  "importSettings": {
+    "size": 8,
+    "descriptor": "pixel8.font.json"
+  }
+}

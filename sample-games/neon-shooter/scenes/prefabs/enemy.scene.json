@@ -1,0 +1,17 @@
+{
+  "format": "lumen2d.scene",
+  "version": 1,
+  "name": "Enemy",
+  "root": {
+    "type": "AnimatedSprite2D",
+    "name": "Enemy",
+    "properties": {
+      "textureId": "lib://packs/base/sprites/slime.png",
+      "hframes": 4,
+      "fps": 7,
+      "groups": [
+        "enemy"
+      ]
+    }
+  }
+}
