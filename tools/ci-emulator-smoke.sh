@@ -51,6 +51,17 @@ record() { # id, ok(yes/no), detail
 }
 
 failures=0
+
+# The emulator explains startup failures only in its own log; annotate the tail so a red run
+# is diagnosable without the (undownloadable) artifact.
+annotate_emulator_log() {
+  [ "${GITHUB_ACTIONS:-}" = "true" ] || return 0
+  [ -s "$ROOT/ci-logs/emulator.log" ] || return 0
+  local escaped
+  escaped="$(tail -n 12 "$ROOT/ci-logs/emulator.log" | sed -e 's/%/%25/g' -e ':a;N;$!ba;s/\n/%0A/g' | cut -c1-900)"
+  printf '::error title=emulator log (tail)::%s\n' "$escaped"
+}
+
 finish() {
   local code="$1"
   local skipped="${2:-}"
@@ -75,6 +86,9 @@ finish() {
   fi
   if [ "${GITHUB_ACTIONS:-}" = "true" ] && [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
     cat "$WORK/report.md" >> "$GITHUB_STEP_SUMMARY"
+  fi
+  if [ "$code" -ne 0 ]; then
+    annotate_emulator_log
   fi
   if [ "${GITHUB_ACTIONS:-}" = "true" ]; then
     # Every failed check becomes its own annotation: annotations are readable from the API, so a
@@ -160,7 +174,30 @@ echo "booting the emulator (headless)…"
   > "$ROOT/ci-logs/emulator.log" 2>&1 &
 EMU_PID=$!
 
-timeout 300 adb wait-for-device || { echo "::error title=emulator smoke::adb never saw the device"; exit 2; }
+# Wait for the device, but notice quickly when the emulator process itself died — a failed
+# start is by far the most common reason for "no device", and waiting five minutes for it
+# wastes a runner.
+booted=no
+for _ in $(seq 1 60); do
+  if ! kill -0 "$EMU_PID" 2>/dev/null; then
+    record "emulator.start" no "the emulator process exited during startup"
+    annotate_emulator_log
+    failures=$((failures + 1))
+    finish 1
+  fi
+  if adb devices 2>/dev/null | grep -qE "emulator-[0-9]+[[:space:]]+device"; then
+    booted=starting
+    break
+  fi
+  sleep 5
+done
+if [ "$booted" != starting ]; then
+  record "emulator.start" no "no emulator device appeared within five minutes"
+  annotate_emulator_log
+  failures=$((failures + 1))
+  finish 1
+fi
+echo "device visible to adb; waiting for the boot to complete"
 booted=no
 for _ in $(seq 1 120); do
   if [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ]; then
@@ -170,8 +207,7 @@ for _ in $(seq 1 120); do
   sleep 5
 done
 if [ "$booted" != yes ]; then
-  record "emulator.boot" no "the emulator did not finish booting within 10 minutes"
-  tail -30 "$ROOT/ci-logs/emulator.log" || true
+  record "emulator.boot" no "the emulator did not finish booting within ten minutes"
   failures=$((failures + 1))
   finish 1
 fi
