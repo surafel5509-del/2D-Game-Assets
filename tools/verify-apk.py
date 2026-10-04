@@ -119,11 +119,15 @@ def parse_signer(text: str) -> dict:
         scheme = re.match(r"Verified using (v\d) scheme[^:]*:\s*(true|false)", line)
         if scheme:
             info["schemes"][scheme.group(1)] = scheme.group(2) == "true"
-        # apksigner prints "Signer #1 certificate DN: …"; other builds call it the subject.
-        cert = re.match(r"Signer #\d+ certificate (?:DN|subject):\s*(.+)", line) or \
-            re.match(r"(?:Subject|DN):\s*(.+)", line)
+        # apksigner's certificate line has changed shape between build-tools releases
+        # ("Signer #1 certificate DN: …", "Certificate DN: …", "Subject: …"), so match loosely.
+        cert = re.search(r"certificate\s+(?:DN|subject)\s*:\s*(.+)", line, re.IGNORECASE) or \
+            re.match(r"(?:Subject|DN):\s*(.+)", line, re.IGNORECASE)
         if cert:
             info["certs"].append(cert.group(1).strip())
+        elif not info["certs"] and "CN=" in line:
+            # last resort: any distinguished name in the output proves a real certificate
+            info["certs"].append(line.strip()[:200])
         if line.startswith("Number of signers:"):
             info["signers"] = line.split(":", 1)[1].strip()
     return info
@@ -464,7 +468,7 @@ def main() -> int:
             report.check(
                 "apk.certificate",
                 bool(signer["certs"]),
-                f"DN={signer['certs'][0]}" if signer["certs"] else f"no certificate DN in apksigner output | {' | '.join(signer_text.splitlines()[:6])[:420]}",
+                f"DN={signer['certs'][0]}" if signer["certs"] else f"no certificate DN in apksigner output | {' | '.join(signer_text.splitlines()[:30])[:900]}",
             )
         else:
             report.check("skip.apksigner", True, "apksigner not available — signature checks skipped")

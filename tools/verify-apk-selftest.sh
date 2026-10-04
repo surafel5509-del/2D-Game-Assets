@@ -107,7 +107,19 @@ Verified using v1 scheme (JAR signing): false
 Verified using v2 scheme (APK Signature Scheme v2): true
 Verified using v3 scheme (APK Signature Scheme v3): false
 Number of signers: 1
+Signer #1:
+  Certificate DN: CN=Android Debug, O=Android, C=US
+EOF
+cat > "$SIGNER" <<'EOF'
+Verifies
+Verified using v1 scheme (JAR signing): false
+Verified using v2 scheme (APK Signature Scheme v2): true
+Verified using v3 scheme (APK Signature Scheme v3): false
+Verified using v3.1 scheme (APK Signature Scheme v3.1): false
+Verified using v3.2 scheme (APK Signature Scheme v3.2): false
+Number of signers: 1
 Signer #1 certificate DN: CN=Android Debug, O=Android, C=US
+Signer #1 certificate SHA-256 digest: 2f3a…
 EOF
 for spelling in minSdkVersion sdkVersion; do
   sed "s/^minSdkVersion:/$spelling:/" "$BADGING" > "$WORK/badging-$spelling.txt"
