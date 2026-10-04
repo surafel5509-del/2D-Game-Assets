@@ -69,11 +69,13 @@ class StudioActivity : Activity() {
         session = opened
         session.onChanged = { onSessionChanged() }
         setContentView(buildUi())
+        // The tab panels are created on demand and the callbacks below expect them to exist, so the
+        // first tab is built before anything can refresh the UI — opening a scene notifies the
+        // session, which refreshes the tree and the inspector straight away.
+        showTab(TAB_SCENE)
         session.openScene(session.scenePath)
         session.selection = session.scene?.root
-        val autoplay = intent.getBooleanExtra(EXTRA_AUTOPLAY, false)
-        setPlaying(autoplay)
-        showTab(TAB_SCENE)
+        setPlaying(intent.getBooleanExtra(EXTRA_AUTOPLAY, false))
         refreshAll()
     }
 

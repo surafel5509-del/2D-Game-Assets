@@ -363,13 +363,16 @@ focused_window() {
 # for the launcher. Report it while it is still in logcat, with the top of the stack.
 annotate_crash() {
   local log="$1" hits
-  hits="$(grep -n "FATAL EXCEPTION" -A 18 "$log" 2>/dev/null | head -24 | tr -d '\r')"
+  hits="$(grep -n "FATAL EXCEPTION" -A 40 "$log" 2>/dev/null | head -50 | tr -d '\r')"
   if printf '%s' "$hits" | grep -q "$PACKAGE"; then
+    # The app's own frames are what matter; the framework frames above them just say "launching".
+    local story
+    story="$(printf '%s\n' "$hits" | grep -E "FATAL EXCEPTION|Process:|Caused by|at dev\\.lumen2d|at .*Studio|at .*LumenGameView|at .*SampleInstaller|at .*ProjectSeeder" | head -12)"
+    [ -n "$story" ] || story="$(printf '%s\n' "$hits" | head -12)"
     if [ "${GITHUB_ACTIONS:-}" = "true" ]; then
-      local escaped
-      escaped="$(printf '%s' "$hits" | head -14 | sed -e 's/%/%25/g' -e ':a;N;$!ba;s/\n/%0A/g' | cut -c1-1400)"
-      printf '::error title=crash after Play::%s\n' "$escaped"
+      printf '::error title=crash after Play::%s\n' "$(printf '%s' "$story" | sed -e 's/%/%25/g' -e ':a;N;$!ba;s/\n/%0A/g' | cut -c1-1400)"
     fi
+    printf '%s\n' "$story" >> "$WORK/crash.txt"
     return 0
   fi
   return 1
