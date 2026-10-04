@@ -71,7 +71,9 @@ open class HorizontalScrollView : FrameLayout {
 open class TextView : View {
     constructor(context: Context) : super(context)
     constructor(context: Context, attrs: AttributeSet?) : super(context, attrs)
-    open var text: CharSequence? = null
+    // Reads use `text`; writes go through setText(). EditText narrows the getter to Editable,
+    // which is exactly why `editText.text = "…"` does not compile against a real SDK.
+    open val text: CharSequence? = null
     var hint: CharSequence? = null
     var textSize: Float = 14f
     // No `textColor` property: the framework getter returns a ColorStateList while the setter
@@ -84,6 +86,7 @@ open class TextView : View {
     var isAllCaps: Boolean = false
     var letterSpacing: Float = 0f
     var paint: android.graphics.Paint? = null
+    open fun setText(value: CharSequence?) {}
     open fun setText(value: Int) {}
     fun setTextSize(unit: Int, size: Float) {}
     fun setTypeface(tf: Typeface?, style: Int) {}
@@ -107,6 +110,9 @@ open class Button : TextView {
 open class EditText : TextView {
     constructor(context: Context) : super(context)
     constructor(context: Context, attrs: AttributeSet?) : super(context, attrs)
+    // EditText overrides getText() to return Editable while the inherited setter still takes a
+    // CharSequence, so `text` cannot be assigned — the framework code has to call setText().
+    override val text: android.text.Editable? get() = null
     var inputType: Int = 0
     var imeOptions: Int = 0
     var isCursorVisible: Boolean = true
@@ -116,7 +122,6 @@ open class EditText : TextView {
     fun setFilters(filters: Array<InputFilter>) {}
     fun addTextChangedListener(watcher: TextWatcher) {}
     fun removeTextChangedListener(watcher: TextWatcher) {}
-    fun getText(): Editable? = TODO()
     fun setSelection(start: Int, stop: Int) {}
     override fun onKeyDown(keyCode: Int, event: android.view.KeyEvent): Boolean = false
 }

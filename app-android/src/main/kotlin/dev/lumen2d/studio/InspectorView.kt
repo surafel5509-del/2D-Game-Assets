@@ -86,7 +86,7 @@ class InspectorView(private val context: Context) {
         view.addView(row)
 
         val visible = CheckBox(context)
-        visible.text = "Visible"
+        visible.setText("Visible")
         visible.isChecked = node.visible
         visible.setTextColor(Studio.TEXT)
         visible.textSize = 12f
@@ -126,11 +126,11 @@ class InspectorView(private val context: Context) {
     private fun boolEditor(node: Node, def: PropertyDef, value: Boolean): View {
         val box = CheckBox(context)
         box.isChecked = value
-        box.text = if (value) "on" else "off"
+        box.setText(if (value) "on" else "off")
         box.setTextColor(Studio.TEXT)
         box.textSize = 12f
         box.setOnCheckedChangeListener { button, checked ->
-            button?.text = if (checked) "on" else "off"
+            button?.setText(if (checked) "on" else "off")
             onEdit?.invoke(node, def.name, checked, true)
         }
         return box
@@ -301,7 +301,7 @@ class InspectorView(private val context: Context) {
         caption.layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
         row.addView(caption)
         val value = TextView(context)
-        value.text = valueText
+        value.setText(valueText)
         value.setTextColor(Studio.TEXT)
         value.textSize = 12f
         row.addView(value)

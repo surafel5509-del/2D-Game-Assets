@@ -70,7 +70,7 @@ fun Context.label(
     monospace: Boolean = false,
 ): TextView {
     val view = TextView(this)
-    view.text = text
+    view.setText(text)
     view.setTextColor(color)
     view.textSize = sizeDp
     view.typeface = when {
@@ -91,7 +91,7 @@ fun Context.button(
     onClick: (View?) -> Unit,
 ): Button {
     val view = Button(this)
-    view.text = text
+    view.setText(text)
     view.isAllCaps = false
     view.textSize = 12f
     view.setTextColor(Studio.TEXT)
@@ -103,7 +103,7 @@ fun Context.button(
 
 fun Context.textField(value: String, hintText: String = "", multiline: Boolean = false): EditText {
     val view = EditText(this)
-    view.text = value
+    view.setText(value)
     view.hint = hintText
     view.textSize = 12f
     view.setTextColor(Studio.TEXT)
@@ -159,7 +159,7 @@ fun Context.sliderRow(
         override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
             if (!fromUser) return
             val v = progress / 1000f
-            readout.text = "%.2f".format(v)
+            readout.setText("%.2f".format(v))
             onChange(v)
         }
         override fun onStartTrackingTouch(seekBar: SeekBar?) {}

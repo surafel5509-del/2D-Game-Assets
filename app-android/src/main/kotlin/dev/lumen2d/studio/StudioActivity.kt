@@ -488,7 +488,7 @@ class StudioActivity : Activity() {
 
     private fun refreshAll() {
         val node = session.selection
-        statusLabel?.text = buildString {
+        statusLabel?.setText(buildString {
             append(if (playing) "▶ playing" else "❚❚ paused")
             append("  ·  ")
             append("${session.scene?.root?.descendants()?.size ?: 0} nodes")
@@ -496,7 +496,7 @@ class StudioActivity : Activity() {
             append("${session.project.index().scenes.size} scenes")
             if (session.unsaved > 0) append("  ·  ${session.unsaved} unsaved")
             if (node != null) append("  ·  sel ${node.name}")
-        }
+        })
     }
 
     companion object {

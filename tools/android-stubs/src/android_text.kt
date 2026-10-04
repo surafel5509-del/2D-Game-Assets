@@ -3,13 +3,15 @@
 
 package android.text
 
-interface Editable {
+// Editable is a CharSequence in the framework (Editable extends CharSequence, GetChars, Spannable),
+// which is why TextView.text can be narrowed to Editable by EditText.
+interface Editable : CharSequence {
     fun clear() {}
     fun append(text: CharSequence?): Editable = TODO()
     fun replace(start: Int, end: Int, text: CharSequence?): Editable = TODO()
     fun insert(where: Int, text: CharSequence?): Editable = TODO()
     fun delete(start: Int, end: Int): Editable = TODO()
-    val length: Int
+    override val length: Int
 }
 
 interface Spanned {

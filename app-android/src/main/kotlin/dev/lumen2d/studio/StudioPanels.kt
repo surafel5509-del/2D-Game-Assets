@@ -292,7 +292,7 @@ class ScriptEditorPanel(private val context: Context, private val session: Studi
         val target = path ?: return
         val text = session.project.readText(target) ?: return
         currentPath = target
-        editor.text = text
+        editor.setText(text)
         editor.setSelection(0)
         session.game.registerScript(target, text)
         refresh()
@@ -339,7 +339,7 @@ class ConsolePanel(private val context: Context, private val session: StudioSess
         bar.addView(context.button("Clear") {
             lines.clear()
             Log.clear()
-            output.text = ""
+            output.setText("")
         })
         view.addView(bar)
         view.addView(stats)
@@ -367,13 +367,13 @@ class ConsolePanel(private val context: Context, private val session: StudioSess
     private fun append(line: String) {
         lines.add(line)
         while (lines.size > 400) lines.removeAt(0)
-        output.text = lines.joinToString("\n")
+        output.setText(lines.joinToString("\n"))
         if (::outputScroll.isInitialized) outputScroll.fullScroll(ScrollView.FOCUS_DOWN)
     }
 
     fun refresh() {
         val summary = session.game.performanceSummary()
-        stats.text = buildString {
+        stats.setText(buildString {
             append("fps ${summary["fps"]?.toInt() ?: 0}  ")
             append("frame ${"%.1f".format(summary["frameMs"] ?: 0f)} ms  ")
             append("nodes ${summary["nodes"]?.toInt() ?: 0}  ")
@@ -382,11 +382,11 @@ class ConsolePanel(private val context: Context, private val session: StudioSess
             append("bodies ${summary["bodies"]?.toInt() ?: 0}  ")
             append("textures ${summary["textures"]?.toInt() ?: 0}  ")
             append("assets ${summary["assets"]?.toInt() ?: 0}")
-        }
+        })
         if (lines.isEmpty()) {
             lines.add("Lumen2D Studio — project '${session.project.config.title}' loaded.")
             lines.add("Scene: ${session.scenePath}")
-            output.text = lines.joinToString("\n")
+            output.setText(lines.joinToString("\n"))
         }
     }
 }
