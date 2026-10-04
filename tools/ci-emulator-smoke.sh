@@ -231,10 +231,40 @@ MODEL="$(adb shell getprop ro.product.model | tr -d '\r')"
 VERSION="$(adb shell getprop ro.build.version.release | tr -d '\r') (API $(adb shell getprop ro.build.version.sdk | tr -d '\r'))"
 record "emulator.boot" yes "booted $MODEL · Android $VERSION"
 
-# Wake the device and get past any keyguard: a headless AVD can boot to a locked screen, where
-# uiautomator would see nothing.
+# Wake the device and get past any keyguard: a headless AVD can boot to a locked screen where
+# uiautomator would see nothing, and it likes to fall asleep again mid-run, so ask it to stay on.
 adb shell input keyevent KEYCODE_WAKEUP > /dev/null 2>&1 || true
 adb shell wm dismiss-keyguard > /dev/null 2>&1 || true
+adb shell svc power stayon true > /dev/null 2>&1 || true
+adb shell settings put system screen_off_timeout 1800000 > /dev/null 2>&1 || true
+
+# A headless device gives no other signal that the hub is on screen, so re-dump until the
+# sample titles show up instead of taking one dump and hoping it caught a laid-out window.
+dump_hub() {
+  adb shell input keyevent KEYCODE_WAKEUP > /dev/null 2>&1 || true
+  adb shell wm dismiss-keyguard > /dev/null 2>&1 || true
+  DUMP_OUT=""
+  for remote in /sdcard/hub.xml /data/local/tmp/hub.xml; do
+    DUMP_OUT="$(adb shell uiautomator dump "$remote" 2>&1 | tr -d '\r' | tail -n 2)"
+    : > "$WORK/hub.xml"
+    adb exec-out cat "$remote" > "$WORK/hub.xml" 2>/dev/null || true
+    [ -s "$WORK/hub.xml" ] && break
+  done
+  # uiautomator's own words ("could not get idle state", …) explain an empty dump; keep them.
+  printf '%s\n' "$DUMP_OUT" > "$WORK/hub-dump.log"
+}
+
+# Evidence for the annotations: a failing dump is useless unless it says what the device showed.
+annotate_ui_evidence() {
+  [ "${GITHUB_ACTIONS:-}" = "true" ] || return 0
+  local focus texts
+  focus="$(adb shell dumpsys window 2>/dev/null | grep -m1 -E 'mCurrentFocus|mFocusedApp' | tr -d '\r' | sed -e 's/%/%25/g' | cut -c1-200)"
+  texts="$(head -n 20 "$WORK/hub-texts.txt" 2>/dev/null | tr '\n' '|' | sed -e 's/%/%25/g' | cut -c1-700)"
+  printf '::error title=current focus::%s\n' "${focus:-unknown}"
+  printf '::error title=hub dump (%s bytes)::%s\n' "$(wc -c < "$WORK/hub.xml" 2>/dev/null || echo 0)" "${texts:-no texts found}"
+  printf '::error title=uiautomator said::%s\n' "$(tail -n 1 "$WORK/hub-dump.log" 2>/dev/null | sed -e 's/%/%25/g' | cut -c1-300)"
+  return 0
+}
 
 # Animation must not fight the tap coordinates below.
 for key in window_animation_scale transition_animation_scale animator_duration_scale; do
@@ -276,26 +306,35 @@ else
   record "runtime.crash" yes "no fatal exception in logcat"
 fi
 
-adb shell uiautomator dump /sdcard/hub.xml > /dev/null 2>&1 || true
-adb pull /sdcard/hub.xml "$WORK/hub.xml" > /dev/null 2>&1 || true
-
-if [ -s "$WORK/hub.xml" ]; then
+MISSING="all three"
+for _ in $(seq 1 12); do
+  sleep 5
+  dump_hub
   python3 "$ROOT/tools/ui_dump.py" texts "$WORK/hub.xml" > "$WORK/hub-texts.txt" 2>/dev/null || true
   MISSING=""
   for title in "Hello Lumen2D" "Pixel Platformer" "Neon Shooter"; do
     grep -qF "$title" "$WORK/hub-texts.txt" || MISSING="$MISSING $title"
   done
-  if [ -z "$MISSING" ]; then
-    record "hub.samples" yes "all three bundled sample games are listed by the hub"
-  else
-    record "hub.samples" no "the hub does not list:$MISSING — check SampleInstaller and assets/samples"
-    failures=$((failures + 1))
-  fi
-  PLAYS="$(python3 "$ROOT/tools/ui_dump.py" count "$WORK/hub.xml" Play 2>/dev/null || echo 0)"
-  record "hub.play-buttons" "$([ "${PLAYS:-0}" -gt 0 ] && echo yes || echo no)" "$PLAYS Play control(s) on screen"
-else
-  record "hub.samples" no "uiautomator dump produced no XML"
+  [ -z "$MISSING" ] && break
+done
+
+PLAYS="$(python3 "$ROOT/tools/ui_dump.py" count "$WORK/hub.xml" Play 2>/dev/null || echo 0)"
+if [ -s "$WORK/hub.xml" ] && [ -z "$MISSING" ]; then
+  record "hub.samples" yes "all three bundled sample games are listed by the hub"
+elif [ -s "$WORK/hub.xml" ]; then
+  record "hub.samples" no "the hub does not list:$MISSING — check SampleInstaller and assets/samples"
   failures=$((failures + 1))
+else
+  record "hub.samples" no "uiautomator produced no XML dump"
+  failures=$((failures + 1))
+fi
+
+if [ "${PLAYS:-0}" -gt 0 ]; then
+  record "hub.play-buttons" yes "$PLAYS Play control(s) on screen"
+else
+  record "hub.play-buttons" no "no Play control on the hub screen"
+  failures=$((failures + 1))
+  annotate_ui_evidence
 fi
 
 adb exec-out screencap -p > "$SHOTS/hub.png" 2>/dev/null || true
