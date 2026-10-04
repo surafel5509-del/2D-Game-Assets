@@ -233,6 +233,11 @@ open class AndroidPlatform(
  *
  * AssetManager cannot be asked for a directory listing of arbitrary depth, so the tree is walked
  * once and cached; asset packs are small (a few hundred files) and rarely change at runtime.
+ *
+ * [root] is the folder inside `assets/` this instance is mounted at, and every path it answers —
+ * including the ones `walk` returns — is relative to that root: on a filesystem rooted at
+ * `samples`, `walk("hello-lumen2d")` answers `hello-lumen2d/project.lumen`, which [readBytes]
+ * takes back directly.
  */
 class AssetFileSystem(
     private val context: Context,
@@ -245,11 +250,18 @@ class AssetFileSystem(
 
     private val fileList: List<String> by lazy { scanTree(root) }
 
+    /** [root] as a path prefix (`"samples/"`), or empty when this filesystem is the whole assets folder. */
+    private val rootPrefix: String = if (root.isEmpty()) "" else "$root/"
+
+    /** [path] as the asset manager sees it, i.e. with the root this filesystem is mounted at. */
     private fun clean(path: String): String {
         val trimmed = path.substringAfter("://", path).trimStart('/').trimEnd('/')
         return when {
             trimmed.isEmpty() -> root
-            trimmed.startsWith(root) -> trimmed
+            root.isEmpty() -> trimmed
+            // A path that already carries the root is kept as written — but only at a component
+            // boundary, so a folder called `samples-extra` is not mistaken for `samples/…`.
+            trimmed == root || trimmed.startsWith(rootPrefix) -> trimmed
             else -> "$root/$trimmed"
         }
     }
@@ -302,25 +314,16 @@ class AssetFileSystem(
 
     override fun walk(path: String): List<String> {
         val full = clean(path)
-        return fileList.filter { it.startsWith("$full/") }.sorted()
+        val prefix = if (full.isEmpty()) "" else "$full/"
+        // Paths come back *relative to this filesystem's root*, like every other VirtualFileSystem,
+        // so a caller can hand one straight back to readBytes/size. Answering with the asset path
+        // instead made the sample installer nest each project under its own folder.
+        return fileList.filter { it.startsWith(prefix) }
+            .map { it.removePrefix(rootPrefix) }
+            .filter { it.isNotEmpty() }
+            .sorted()
     }
 
     override fun resolve(path: String): String = clean(path)
     override fun toString(): String = "AssetFileSystem(assets/$root)"
-
-    /** Copies this tree into a writable [VirtualFileSystem] — used to seed sample projects. */
-    fun copyInto(target: VirtualFileSystem, targetRoot: String = ""): Int {
-        var copied = 0
-        for (file in fileList) {
-            val relative = file.removePrefix("$root/").removePrefix("/")
-            val destination = if (targetRoot.isEmpty()) {
-                relative
-            } else {
-                "$targetRoot/${relative.removePrefix("$targetRoot/")}"
-            }
-            target.writeBytes(destination, readBytes(file))
-            copied++
-        }
-        return copied
-    }
 }

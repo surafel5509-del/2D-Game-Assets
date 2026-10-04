@@ -195,10 +195,22 @@ class PrefixedFileSystem(
     override fun list(path: String) = delegate.list(real(path))
     override fun readBytes(path: String) = delegate.readBytes(real(path))
     override fun writeBytes(path: String, bytes: ByteArray) = delegate.writeBytes(real(path), bytes)
+    // The two text helpers have default implementations in the interface, and delegation would
+    // hand them to the delegate *without* resolving [root] — so a write through "user://" would
+    // land outside the user folder. They go through resolve like everything else.
+    override fun readText(path: String): String = String(readBytes(path), Charsets.UTF_8)
+    override fun writeText(path: String, text: String) = writeBytes(path, text.toByteArray(Charsets.UTF_8))
     override fun mkdirs(path: String) = delegate.mkdirs(real(path))
     override fun delete(path: String, recursive: Boolean) = delegate.delete(real(path), recursive)
     override fun rename(from: String, to: String) = delegate.rename(real(from), real(to))
     override fun size(path: String) = delegate.size(real(path))
     override fun lastModified(path: String) = delegate.lastModified(real(path))
-    override fun walk(path: String) = delegate.walk(real(path))
+    /**
+     * Walked paths are relative to [root], not to the delegate: [readBytes], [size] and the rest
+     * resolve against that prefix, so every path this filesystem hands out is one it accepts.
+     */
+    override fun walk(path: String): List<String> {
+        val prefix = if (root.isEmpty()) "" else "$root/"
+        return delegate.walk(real(path)).map { it.removePrefix(prefix) }
+    }
 }

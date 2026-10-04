@@ -15,7 +15,7 @@ fun main(args: Array<String>) {
     Log.printToStdout = args.contains("--verbose")
 
     println("Lumen2D engine test suite")
-    println("engine-core: math, json, scene graph, physics, tilemaps, particles, animation, audio, assets, library, scripts")
+    println("engine-core: math, json, scene graph, physics, tilemaps, particles, animation, audio, assets, library, storage, scripts")
     val started = System.currentTimeMillis()
 
     coreTests()
@@ -28,6 +28,7 @@ fun main(args: Array<String>) {
     audioTests()
     assetTests()
     libraryTests()
+    storageTests()
     scriptTests()
 
     val elapsed = System.currentTimeMillis() - started

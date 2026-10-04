@@ -16,6 +16,7 @@ package dev.lumen2d.android
 
 import dev.lumen2d.core.game.GameConfig
 import dev.lumen2d.core.game.Project
+import dev.lumen2d.core.game.ProjectSeeder
 import dev.lumen2d.core.platform.FileFileSystem
 import dev.lumen2d.core.util.Json
 import java.io.File
@@ -249,45 +250,26 @@ object ProjectArchive {
  */
 object SampleInstaller {
 
-    /** Copies missing samples into [projectsDirectory]; returns the folders it created. */
+    /**
+     * Copies missing samples into [projectsDirectory]; returns the folders it created.
+     *
+     * The copy itself lives in [ProjectSeeder] so the offline test suite can cover it; this method
+     * only maps the result back onto `java.io.File`s for the studio's project list.
+     */
     fun install(platform: AndroidPlatform, projectsDirectory: File): List<File> {
-        val created = ArrayList<File>()
-        val vfs = platform.bundledSamples
-        val ids = runCatching { vfs.list("") }.getOrDefault(emptyList())
-        for (id in ids) {
-            val target = File(projectsDirectory, id)
-            if (File(target, Project.MANIFEST).exists()) continue
-            target.mkdirs()
-            var copied = 0
-            for (file in vfs.walk(id)) {
-                if (file.equals("${Project.MANIFEST}", true)) continue
-                val relative = file.removePrefix("$id/")
-                val destination = File(target, relative)
-                destination.parentFile?.mkdirs()
-                runCatching {
-                    destination.writeBytes(vfs.readBytes(file))
-                    copied++
-                }
-            }
-            if (copied > 0) created.add(target) else target.deleteRecursively()
-        }
-        return created
+        projectsDirectory.mkdirs()
+        val created = ProjectSeeder.installSamples(platform.bundledSamples, FileFileSystem(projectsDirectory))
+        return created.map { File(projectsDirectory, it) }
     }
 
     /** Copies `assets/packs/<id>` into writable storage so the user can edit an imported pack. */
     fun installPack(platform: AndroidPlatform, packsDirectory: File, id: String): Int {
-        val vfs = platform.bundledFileSystem
-        val packRoot = "${AndroidPlatform.LIBRARY_FOLDER}/$id"
-        var copied = 0
-        for (file in vfs.walk(packRoot)) {
-            val relative = file.removePrefix("$packRoot/")
-            val destination = File(packsDirectory, "$id/$relative")
-            destination.parentFile?.mkdirs()
-            runCatching {
-                destination.writeBytes(vfs.readBytes(file))
-                copied++
-            }
-        }
-        return copied
+        packsDirectory.mkdirs()
+        return ProjectSeeder.copyFolder(
+            source = platform.bundledFileSystem,
+            sourceRoot = "${AndroidPlatform.LIBRARY_FOLDER}/$id",
+            target = FileFileSystem(packsDirectory),
+            targetRoot = id,
+        )
     }
 }
