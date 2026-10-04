@@ -264,6 +264,9 @@ annotate_ui_evidence() {
   focus="$(adb shell dumpsys window 2>/dev/null | grep -m1 -E 'mCurrentFocus|mFocusedApp' | tr -d '\r' | sed -e 's/%/%25/g' | cut -c1-200)"
   texts="$(head -n 20 "$WORK/hub-texts.txt" 2>/dev/null | tr '\n' '|' | sed -e 's/%/%25/g' | cut -c1-700)"
   printf '::error title=current focus::%s\n' "${focus:-unknown}"
+  adb logcat -d -v brief 2>/dev/null | grep -E "FATAL EXCEPTION|Lumen2D|$PACKAGE" | tail -6 | sed -e 's/%/%25/g' | while IFS= read -r line; do
+    printf '::error title=last app log line::%s\n' "$(printf '%s' "$line" | cut -c1-300)"
+  done
   printf '::error title=hub dump (%s bytes)::%s\n' "$(wc -c < "$WORK/hub.xml" 2>/dev/null || echo 0)" "${texts:-no texts found}"
   printf '::error title=uiautomator said::%s\n' "$(tail -n 1 "$WORK/hub-dump.log" 2>/dev/null | sed -e 's/%/%25/g' | cut -c1-300)"
   return 0
@@ -356,31 +359,57 @@ focused_window() {
   adb shell dumpsys window 2>/dev/null | grep -m1 -E 'mCurrentFocus|mFocusedApp' | tr -d '\r'
 }
 
+# A crash is the usual reason for a tap that "does nothing", and the app leaving the foreground
+# for the launcher. Report it while it is still in logcat, with the top of the stack.
+annotate_crash() {
+  local log="$1" hits
+  hits="$(grep -n "FATAL EXCEPTION" -A 18 "$log" 2>/dev/null | head -24 | tr -d '\r')"
+  if printf '%s' "$hits" | grep -q "$PACKAGE"; then
+    if [ "${GITHUB_ACTIONS:-}" = "true" ]; then
+      local escaped
+      escaped="$(printf '%s' "$hits" | head -14 | sed -e 's/%/%25/g' -e ':a;N;$!ba;s/\n/%0A/g' | cut -c1-1400)"
+      printf '::error title=crash after Play::%s\n' "$escaped"
+    fi
+    return 0
+  fi
+  return 1
+}
+
 TAP=""
+TAPPED_AT=""
 opened=no
 for attempt in 1 2; do
+  [ "$attempt" -eq 2 ] && dump_hub
   TAP="$(python3 "$ROOT/tools/ui_dump.py" find "$WORK/hub.xml" Play 2>/dev/null || true)"
   [ -n "$TAP" ] || break
+  TAPPED_AT="$TAP"
   echo "tapping Play at $TAP (attempt $attempt)"
   adb shell input tap $TAP > /dev/null 2>&1 || true
-  for _ in $(seq 1 8); do
+  for poll in $(seq 1 8); do
     sleep 5
+    if [ "$poll" -eq 2 ]; then
+      adb logcat -d -v brief > "$ROOT/ci-logs/logcat-after-play.txt" 2>/dev/null || true
+      if annotate_crash "$ROOT/ci-logs/logcat-after-play.txt"; then
+        record "runtime.crash" no "the app crashed after tapping Play (see the annotation)"
+        failures=$((failures + 1))
+        break 2
+      fi
+    fi
     if focused_window | grep -q "StudioActivity"; then
       opened=yes
       break 2
     fi
   done
-  dump_hub
 done
 
-if [ -z "$TAP" ]; then
+if [ -z "$TAPPED_AT" ]; then
   record "ui.play-control" no "no Play control was found in the hub dump"
   failures=$((failures + 1))
   annotate_ui_evidence
 elif [ "$opened" = yes ]; then
-  record "editor.open" yes "Play opened the studio — $(focused_window | cut -c1-140)"
+  record "editor.open" yes "Play at $TAPPED_AT opened the studio — $(focused_window | cut -c1-140)"
 else
-  record "editor.open" no "tapping Play at $TAP never reached the studio — $(focused_window | cut -c1-140)"
+  record "editor.open" no "tapping Play at $TAPPED_AT never reached the studio — $(focused_window | cut -c1-140)"
   failures=$((failures + 1))
   annotate_ui_evidence
 fi
