@@ -31,6 +31,9 @@ PACKAGE="dev.lumen2d.studio.debug"
 API="${ANDROID_EMULATOR_API:-30}"
 REPORT=""
 SHOTS="$ROOT/ci-logs/emulator-shots"
+# A second run (the minified release APK) shares the workspace and must not overwrite the first
+# run's screenshots, so its files are prefixed and land in their own directory.
+SHOT_PREFIX=""
 WORK="$(mktemp -d)"
 AVD_NAME="lumen2d-ci"
 EMU_PID=""
@@ -41,12 +44,16 @@ while [ $# -gt 0 ]; do
     --api) API="${2:-30}"; shift 2 ;;
     --report) REPORT="${2:-}"; shift 2 ;;
     --shots) SHOTS="${2:-$SHOTS}"; shift 2 ;;
+    --shot-prefix) SHOT_PREFIX="${2:-}"; shift 2 ;;
     -h|--help) sed -n '2,22p' "${BASH_SOURCE[0]}"; exit 0 ;;
     *) APK="$1"; shift ;;
   esac
 done
 
 mkdir -p "$ROOT/ci-logs" "$SHOTS"
+# Report paths are printed relative to the repository so a run in any directory reads the same.
+SHOTS_REL="${SHOTS#"$ROOT/"}"
+SHOT_PREFIX="${SHOT_PREFIX:-}"
 RESULTS="$WORK/results.tsv"
 : > "$RESULTS"
 
@@ -342,9 +349,9 @@ else
   annotate_ui_evidence
 fi
 
-adb exec-out screencap -p > "$SHOTS/hub.png" 2>/dev/null || true
-if [ -s "$SHOTS/hub.png" ] && head -c 8 "$SHOTS/hub.png" | grep -q "PNG"; then
-  record "hub.screenshot" yes "$(wc -c < "$SHOTS/hub.png") bytes → ci-logs/emulator-shots/hub.png"
+adb exec-out screencap -p > "$SHOTS/${SHOT_PREFIX}hub.png" 2>/dev/null || true
+if [ -s "$SHOTS/${SHOT_PREFIX}hub.png" ] && head -c 8 "$SHOTS/${SHOT_PREFIX}hub.png" | grep -q "PNG"; then
+  record "hub.screenshot" yes "$(wc -c < "$SHOTS/${SHOT_PREFIX}hub.png") bytes → $SHOTS_REL/${SHOT_PREFIX}hub.png"
 else
   record "hub.screenshot" no "screencap produced no PNG"
   failures=$((failures + 1))
@@ -418,8 +425,8 @@ else
 fi
 
 if [ "$opened" = yes ]; then
-  adb exec-out screencap -p > "$SHOTS/editor.png" 2>/dev/null || true
-  [ -s "$SHOTS/editor.png" ] && record "editor.screenshot" yes "$(wc -c < "$SHOTS/editor.png") bytes → ci-logs/emulator-shots/editor.png"
+  adb exec-out screencap -p > "$SHOTS/${SHOT_PREFIX}editor.png" 2>/dev/null || true
+  [ -s "$SHOTS/${SHOT_PREFIX}editor.png" ] && record "editor.screenshot" yes "$(wc -c < "$SHOTS/${SHOT_PREFIX}editor.png") bytes → $SHOTS_REL/${SHOT_PREFIX}editor.png"
 
   # Playing has to reach the engine: its own log line proves a scene was loaded on the device.
   SCENE_LINE=""
@@ -495,8 +502,8 @@ else
       failures=$((failures + 1))
     elif [ "$created" = yes ]; then
       record "new-project.opened" yes "Create opened the new project in the studio — $(focused_window | cut -c1-120)"
-      adb exec-out screencap -p > "$SHOTS/new-project.png" 2>/dev/null || true
-      [ -s "$SHOTS/new-project.png" ] && record "new-project.screenshot" yes "$(wc -c < "$SHOTS/new-project.png") bytes → ci-logs/emulator-shots/new-project.png"
+      adb exec-out screencap -p > "$SHOTS/${SHOT_PREFIX}new-project.png" 2>/dev/null || true
+      [ -s "$SHOTS/${SHOT_PREFIX}new-project.png" ] && record "new-project.screenshot" yes "$(wc -c < "$SHOTS/${SHOT_PREFIX}new-project.png") bytes → $SHOTS_REL/${SHOT_PREFIX}new-project.png"
       NEW_SCENE=""
       for _ in $(seq 1 6); do
         sleep 5

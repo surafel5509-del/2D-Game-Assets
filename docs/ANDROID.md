@@ -99,15 +99,22 @@ does not simply build the APK — it verifies it:
    into the runner's SDK, assembles debug + release, and verifies both with `tools/verify-apk.sh`
    (manifest, signature, dex, pack manifests, sidecars, provenance index, sample projects,
    `noCompress`, and an exact comparison against the repository's content).
-4. **Install and run the APK on an emulator** — boots a headless API 30 emulator, installs the debug
-   APK, checks that the hub starts and lists all three bundled sample games (which proves the
-   packaged `assets/samples` were read and seeded on device), taps **Play**, and requires a
-   `Scene … loaded` line from the engine in logcat. Screenshots of the hub and the running editor are
-   uploaded as `lumen2d-device-screenshots`.
+4. **Install and run the APKs on an emulator** — two jobs run in parallel, one per APK. The debug
+   build and the R8-minified release build are *not* the same code, so each is booted on its own
+   headless API 30 emulator and driven through the same checks: the hub starts and lists all three
+   bundled sample games (which proves the packaged `assets/samples` were read and seeded on device),
+   **Play** opens the studio and the engine logs a `Scene … loaded` line. Each run then performs the
+   flow a user performs on their own phone — **+ New project**, a name typed into the dialog,
+   **Create** — and requires that the studio opens, the engine loads the new project's scene, going
+   back lists the project in the hub again, and no fatal exception appears anywhere in between
+   (a device-only crash that survived the sample-game path is why this scenario exists). Screenshots
+   of the hub, the running editor and the new project are uploaded per run as
+   `lumen2d-device-screenshots` and `lumen2d-device-screenshots-release`.
 5. **Re-verify the artifacts and publish the release** — downloads the uploaded APKs, verifies them a
    second time independently, and refreshes the **latest-build** release (or the tag release) with
-   the APKs, their SHA-256 checksums, both verification reports and the on-device report in the
-   release notes, plus the emulator screenshots as `device-hub.png` / `device-editor.png` assets.
+   the APKs, their SHA-256 checksums, both static verification reports and both on-device reports in
+   the release notes, plus every emulator screenshot as an asset (`device-hub.png`,
+   `device-editor.png`, `device-new-project.png` and the release run's `device-release-*.png`).
 
 The APK is therefore only published after it has been inspected statically *and* executed on a
 device. `docs/BUILDING.md` §6 documents the individual checks and how to run them locally.

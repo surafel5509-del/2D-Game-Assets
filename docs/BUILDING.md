@@ -123,7 +123,8 @@ verified.**
 | **Engine core tests (JVM)** | the engine suite passes under Gradle 8.14.3 + JDK 17 (`:engine-core:engineTests`) |
 | **Asset library, samples and previews** | regenerating `assets-library/`/`sample-games/` changes nothing (committed content == engine output), every sample runs headlessly, the seven previews render, and the APK verifier's own self-test passes |
 | **Build and verify the Android APK** | SDK 36 assembles debug + release; both APKs pass the static verification below |
-| **Install and run the APK on an emulator** | a headless API 30 emulator installs the debug APK, the hub launches and lists all three bundled samples, and playing one makes the engine log a scene load |
+| **Install and run the APK on an emulator** | a headless API 30 emulator installs the debug APK, the hub launches and lists all three bundled samples, playing one makes the engine log a scene load, and creating a project from **+ New project** reaches the studio without a fatal exception |
+| **Install and run the release APK on an emulator** | the same run for the R8-minified, resource-shrunk release APK — minification is whole-program, so the release build has to prove itself on a device too |
 | **Re-verify the artifacts and publish the release** | the *uploaded* APKs are downloaded and verified again independently, then published as the rolling `latest-build` release with checksums, both verification reports and the device report in the notes, and the emulator screenshots as release assets |
 
 Every build step runs through `tools/ci-run.sh`, which tees its output to `ci-logs/` (uploaded as an
@@ -159,6 +160,27 @@ Everything is reported as a markdown table, written to the step summary and, on 
 annotations. `tools/verify-apk-selftest.sh` builds a healthy APK and a deliberately broken one out of
 the repository's own content and asserts the verifier accepts one and rejects the other, so the
 verifier cannot rot silently; it needs no SDK and runs in CI on every push.
+
+### Running the on-device smoke test
+
+```bash
+tools/ci-emulator-smoke.sh app-android/build/outputs/apk/debug/app-android-debug.apk \
+  --package dev.lumen2d.studio.debug --api 30 \
+  --report build/emulator-report.md --shots ci-logs/emulator-shots
+```
+
+It needs `adb`, `emulator` and `avdmanager` plus `/dev/kvm`; it puts the SDK's own directories on
+`PATH` itself and installs the emulator packages when they are missing. Without virtualisation it
+records a *skipped* report and exits 0 — a shared runner cannot be blamed for a missing device. The
+checks are listed in the report table and the screenshots land in `--shots`.
+
+CI runs it twice, once per APK (debug and release), in parallel jobs; `--shot-prefix release-` keeps
+the second run's files from overwriting the first run's.
+
+The test drives the real UI, so it locates controls with `dumpsys window` (a focused activity),
+`uiautomator dump` and `tools/ui_dump.py find <dump.xml> <label>` (which prefers an exact, clickable,
+on-screen match); `tools/ui_dump.py findclass <dump.xml> <class>` handles widgets that have no label
+to match, such as the new-project dialog's text field.
 
 ## 7. Repository conventions
 

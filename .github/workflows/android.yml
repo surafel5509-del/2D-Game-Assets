@@ -237,14 +237,66 @@ jobs:
             ci-logs/emulator.log
           if-no-files-found: ignore
 
+  # The release APK is R8-minified and resource-shrunk, so it is not the same code the debug job
+  # drives. It gets the same on-device run — in parallel, so the pipeline does not get longer.
+  android-emulator-release:
+    name: Install and run the release APK on an emulator
+    needs: android-apk
+    if: github.event_name != 'pull_request' && (github.event_name != 'workflow_dispatch' || inputs.emulator_smoke)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Locate the runner's Android SDK
+        run: |
+          SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          CMDLINE="$(ls -d "$SDK"/cmdline-tools/*/bin 2>/dev/null | sort -V | tail -1)"
+          {
+            echo "ANDROID_HOME=$SDK"
+            echo "ANDROID_SDK_ROOT=$SDK"
+            echo "PATH=$CMDLINE:$SDK/platform-tools:$SDK/emulator:$PATH"
+          } >> "$GITHUB_ENV"
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: lumen2d-studio-apk
+          path: build/apk
+
+      - name: Install and play the release APK on a headless emulator
+        run: |
+          APK="$(find build/apk -name '*-release.apk' | head -1)"
+          echo "verifying $APK"
+          tools/ci-emulator-smoke.sh "$APK" \
+            --package dev.lumen2d.studio \
+            --api "${ANDROID_EMULATOR_API}" \
+            --report build/emulator-report-release.md \
+            --shots ci-logs/emulator-shots-release \
+            --shot-prefix release-
+
+      - name: Upload the release screenshots and the report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: lumen2d-device-screenshots-release
+          path: |
+            ci-logs/emulator-shots-release/
+            build/emulator-report-release.md
+          if-no-files-found: ignore
+
   # ------------------------------------------------------------ verify and publish
   publish:
     name: Re-verify the artifacts and publish the release
-    needs: [ android-apk, android-emulator ]
+    needs: [ android-apk, android-emulator, android-emulator-release ]
     if: |
       always() &&
       needs.android-apk.result == 'success' &&
       (needs.android-emulator.result == 'success' || needs.android-emulator.result == 'skipped') &&
+      (needs.android-emulator-release.result == 'success' || needs.android-emulator-release.result == 'skipped') &&
       github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -277,6 +329,12 @@ jobs:
       - uses: actions/download-artifact@v8
         with:
           name: lumen2d-device-screenshots
+          path: build/device
+        continue-on-error: true
+      # The release run's files are prefixed, so both sets can share one directory.
+      - uses: actions/download-artifact@v8
+        with:
+          name: lumen2d-device-screenshots-release
           path: build/device
         continue-on-error: true
 
@@ -332,20 +390,27 @@ jobs:
             cat build/recheck-release.md
             echo
             echo "</details>"
-            # The artifact unpacks with the paths it was uploaded from, so look for the report
-            # instead of assuming where it landed.
-            DEVICE_REPORT="$(find build/device -name 'emulator-report.md' 2>/dev/null | head -1)"
-            if [ -n "$DEVICE_REPORT" ]; then
-              echo "<details><summary>On-device verification — emulator</summary>"
+            # The artifacts unpack with the paths they were uploaded from, so look for the reports
+            # instead of assuming where they landed: each device job publishes its own.
+            for DEVICE_REPORT in $(find build/device -name 'emulator-report*.md' 2>/dev/null | sort); do
+              case "$DEVICE_REPORT" in
+                *release*) SUMMARY="On-device verification — release APK (minified)" ;;
+                *) SUMMARY="On-device verification — debug APK" ;;
+              esac
+              echo "<details><summary>$SUMMARY</summary>"
               echo
               cat "$DEVICE_REPORT"
               echo
-              for shot in hub editor; do
-                echo "![device-$shot](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/download/${TAG}/device-$shot.png)"
-                echo
-              done
               echo "</details>"
-            fi
+              echo
+            done
+            # Every screenshot either device job produced is uploaded below, so the notes show all
+            # of them without anyone maintaining a list.
+            for shot in $(find build/device -name '*.png' 2>/dev/null | sort); do
+              name="device-$(basename "$shot")"
+              echo "![${name%.png}](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/download/${TAG}/${name})"
+              echo
+            done
           } > build/release-notes.md
 
           gh release view "$TAG" > /dev/null 2>&1 || \
