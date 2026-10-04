@@ -101,7 +101,9 @@ open class AndroidPlatform(
         override fun setClipboard(text: String) {
             val manager = appContext.getSystemService(Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
                 ?: return
-            manager.primaryClip = android.content.ClipData.newPlainText("Lumen2D", text)
+            // `primaryClip` is read-only in Kotlin: since API 29 the getter returns ClipData?
+            // while the setter takes a non-null ClipData, so the synthetic property has no setter.
+            manager.setPrimaryClip(android.content.ClipData.newPlainText("Lumen2D", text))
         }
 
         override fun clipboard(): String {
@@ -253,12 +255,12 @@ class AssetFileSystem(
     }
 
     private fun scanTree(directory: String): List<String> = buildList {
-        val children = runCatching { manager.list(directory) }.getOrDefault(emptyArray())
+        val children: Array<String> = runCatching { manager.list(directory) }.getOrNull() ?: emptyArray()
         for (name in children) {
             val full = if (directory.isEmpty()) name else "$directory/$name"
             // AssetManager reports file and directory entries the same way: a nested list() that
             // returns something means it is a directory.
-            val nested = runCatching { manager.list(full) }.getOrDefault(emptyArray())
+            val nested: Array<String> = runCatching { manager.list(full) }.getOrNull() ?: emptyArray()
             if (nested.isNotEmpty()) addAll(scanTree(full)) else add(full)
         }
     }

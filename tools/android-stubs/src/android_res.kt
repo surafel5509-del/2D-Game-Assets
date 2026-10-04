@@ -10,8 +10,9 @@ import java.io.InputStream
 open class AssetManager {
     open fun open(fileName: String): InputStream = java.io.ByteArrayInputStream(ByteArray(0))
     open fun open(fileName: String, accessMode: Int): InputStream = open(fileName)
-    open fun list(path: String): Array<String> = emptyArray()
-    open fun list(path: String, options: Int): Array<String> = emptyArray()
+    // AssetManager.list() returns null when the directory does not exist (real SDK signature).
+    open fun list(path: String): Array<String>? = null
+    open fun list(path: String, options: Int): Array<String>? = null
     open fun close() {}
     companion object { const val ACCESS_STREAMING = 1; const val ACCESS_BUFFER = 3 }
 }

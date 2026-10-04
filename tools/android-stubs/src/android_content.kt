@@ -117,7 +117,10 @@ class ClipData {
 }
 
 class ClipboardManager {
-    var primaryClip: ClipData? = null
+    // Mirrors the framework: the getter is nullable, the setter takes a non-null ClipData, so
+    // Kotlin cannot synthesise a `var` — code must call setPrimaryClip() explicitly.
+    val primaryClip: ClipData? = null
+    fun setPrimaryClip(clip: ClipData) {}
     fun clearPrimaryClip() {}
     fun hasPrimaryClip(): Boolean = false
 }
