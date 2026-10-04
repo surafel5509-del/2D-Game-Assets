@@ -21,6 +21,11 @@ set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
 export PATH="$SDK/platform-tools:$SDK/emulator:$SDK/cmdline-tools/latest/bin:$PATH"
+
+# avdmanager and the emulator do not always agree on where AVDs live (the emulator only looks in
+# $ANDROID_AVD_HOME, $ANDROID_SDK_HOME/avd and $HOME/.android/avd), so pin it for both.
+export ANDROID_AVD_HOME="${ANDROID_AVD_HOME:-$HOME/.android/avd}"
+mkdir -p "$ANDROID_AVD_HOME"
 APK=""
 PACKAGE="dev.lumen2d.studio.debug"
 API="${ANDROID_EMULATOR_API:-30}"
@@ -165,6 +170,17 @@ if ! echo no | avdmanager create avd -n "$AVD_NAME" -k "$IMAGE" --device pixel_5
     tail -20 "$WORK/avd.log"
     exit 2
   }
+fi
+
+# The emulator must be able to see what avdmanager just created, or it exits with
+# "Unknown AVD name" — a check that saves five minutes of confusing silence.
+AVDS="$("$SDK/emulator/emulator" -list-avds 2>/dev/null | tr -d '\r' | tr '\n' ' ')"
+if "$SDK/emulator/emulator" -list-avds 2>/dev/null | tr -d '\r' | grep -qx "$AVD_NAME"; then
+  record "avd.visible" yes "the emulator lists $AVD_NAME (avd home: $ANDROID_AVD_HOME)"
+else
+  record "avd.visible" no "the emulator does not see $AVD_NAME; avd home: $ANDROID_AVD_HOME; avds it lists: ${AVDS:-none}"
+  failures=$((failures + 1))
+  finish 1
 fi
 
 echo "booting the emulator (headless)…"
