@@ -36,11 +36,14 @@ import java.io.File
 /**
  * @param context any context; the application context is used so long-lived game objects never
  *   leak an Activity.
- * @param bundledRoot folder inside the APK assets that holds the asset library (`packs/base`).
+ * @param contentRoot folder inside the APK assets that holds engine content. It is mounted as
+ *   `lib://`, so with the default (the asset root) the paths match every other platform:
+ *   `lib://packs/base/sprites/player.png` and the provenance index at `lib://sources/...`.
+ * @param samplesRoot folder inside the APK assets holding the sample games (`samples/<game>`).
  */
 open class AndroidPlatform(
     context: Context,
-    private val bundledRoot: String = DEFAULT_BUNDLED_ROOT,
+    private val contentRoot: String = DEFAULT_CONTENT_ROOT,
     private val samplesRoot: String = DEFAULT_SAMPLES_ROOT,
 ) : Platform {
 
@@ -59,17 +62,18 @@ open class AndroidPlatform(
 
     override val userFileSystem: VirtualFileSystem = PrefixedFileSystem(FileFileSystem(dataDirectory), "user")
 
-    /** Folder inside the APK that holds engine content (`assets/packs`, `assets/samples`). */
-    val assetsDirectory: String get() = bundledRoot
+    /** Folder inside the APK that holds engine content (the asset root by default). */
+    val assetsDirectory: String get() = contentRoot
 
-    override val bundledContentRoot: String = "assets://$bundledRoot"
+    override val bundledContentRoot: String = "assets://$contentRoot"
 
     /**
-     * `lib://` maps onto the APK's `assets/packs` tree. The file list is cached: walking the asset
-     * manager recurses through directories and is far too slow to do per lookup.
+     * `lib://` maps onto the APK's asset tree (`assets/packs`, `assets/sources`). The file list is
+     * cached: walking the asset manager recurses through directories and is far too slow to do per
+     * lookup.
      */
     override val bundledFileSystem: VirtualFileSystem by lazy {
-        AssetFileSystem(appContext, bundledRoot)
+        AssetFileSystem(appContext, contentRoot)
     }
 
     /** Sample projects shipped inside the APK (`assets/samples`), copied out on first run. */
@@ -205,7 +209,19 @@ open class AndroidPlatform(
 
     companion object {
         const val LOG_TAG = "Lumen2D"
-        const val DEFAULT_BUNDLED_ROOT = "packs"
+
+        /** Asset root: `lib://` resolves `packs/…` and `sources/…` from here. */
+        const val DEFAULT_CONTENT_ROOT = ""
+
+        /** Folder inside the content root that holds the asset library packs. */
+        const val LIBRARY_FOLDER = "packs"
+
+        /** Folder inside the content root that holds the per-file provenance index. */
+        const val SOURCES_FOLDER = "sources"
+
+        /** Pack the engine's own art, fonts and sound live in. */
+        const val BASE_PACK = "packs/base"
+
         const val DEFAULT_SAMPLES_ROOT = "samples"
     }
 }
@@ -218,7 +234,7 @@ open class AndroidPlatform(
  */
 class AssetFileSystem(
     private val context: Context,
-    private val root: String = AndroidPlatform.DEFAULT_BUNDLED_ROOT,
+    private val root: String = AndroidPlatform.DEFAULT_CONTENT_ROOT,
 ) : VirtualFileSystem {
 
     private val manager get() = context.assets

@@ -25,10 +25,13 @@ import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import dev.lumen2d.core.assets.AssetLibrary
 import dev.lumen2d.core.assets.AssetMeta
+import dev.lumen2d.core.assets.AssetSource
 import dev.lumen2d.core.assets.AssetType
 import dev.lumen2d.core.game.Game
 import dev.lumen2d.core.render.Texture2D
+import dev.lumen2d.android.LumenAndroid
 import dev.lumen2d.core.util.Log
 import dev.lumen2d.core.util.LogLevel
 
@@ -38,6 +41,14 @@ private class AssetCard(context: Context, val meta: AssetMeta) : LinearLayout(co
 }
 
 class AssetBrowserView(private val context: Context, private val session: StudioSession) {
+
+    /**
+     * The engine's asset library (packs + provenance index) inside the APK. Loaded once: it is
+     * what turns an asset card from a file name into "CC0-1.0, imported from Kenney".
+     */
+    private val library: AssetLibrary? by lazy {
+        runCatching { LumenAndroid.library(session.platform) }.getOrNull()?.takeIf { it.packCount > 0 }
+    }
 
     val view: LinearLayout = LinearLayout(context).also {
         it.orientation = LinearLayout.VERTICAL
@@ -61,6 +72,12 @@ class AssetBrowserView(private val context: Context, private val session: Studio
         header.addView(spacer)
         header.addView(context.button("Rescan") { refresh() })
         view.addView(header)
+        library?.let { lib ->
+            val packs = lib.packs.joinToString(" · ") { pack ->
+                "${pack.name} (${pack.license.ifEmpty { "?" }}, ${pack.manifest.fileCount})"
+            }
+            view.addView(context.dim("Library: ${lib.packCount} packs — $packs", 9f))
+        } ?: view.addView(context.dim("Library: none bundled in this build", 9f))
         view.addView(context.divider())
 
         val scroll = ScrollView(context)
@@ -94,6 +111,13 @@ class AssetBrowserView(private val context: Context, private val session: Studio
         }
     }
 
+    /**
+     * Provenance of the asset — which recipe or archive produced it, under which licence — or null
+     * for project files the library knows nothing about. Library ids are `pack:path`, which is
+     * exactly what the source index is keyed by, so the lookup is a map hit.
+     */
+    fun provenance(meta: AssetMeta): AssetSource? = library?.index?.provenance(meta.id)
+
     private fun card(meta: AssetMeta): View {
         val card = AssetCard(context, meta)
         card.orientation = LinearLayout.VERTICAL
@@ -111,16 +135,34 @@ class AssetBrowserView(private val context: Context, private val session: Studio
         card.addView(context.label(meta.displayName.ifEmpty { meta.path.substringAfterLast('/') }, 11f, Studio.TEXT))
         card.addView(context.dim("${meta.type.id} · ${meta.sizeBytes} B", 9f))
         card.addView(context.dim(meta.id, 9f))
+        provenance(meta)?.let { source ->
+            // Licence and origin are the two things a shipping game has to be able to answer.
+            card.addView(context.dim("${source.license.ifEmpty { "unknown" }} · ${source.origin.label}", 8f))
+            if (source.recipe.isNotEmpty()) card.addView(context.dim(source.recipe, 8f))
+        }
+        if (isImported(meta)) {
+            card.addView(context.pill("imported", Studio.WARN))
+        }
 
         card.isClickable = true
         card.setOnClickListener { onPick?.invoke(meta) }
         card.setOnLongClickListener {
-            session.platform.device.setClipboard(meta.id)
-            session.platform.device.toast("Copied ${meta.id}")
+            val source = provenance(meta)
+            if (source != null) {
+                val text = "${meta.id}\n${source.license} — ${source.author}\n${source.describe()}"
+                session.platform.device.setClipboard(text)
+                session.platform.device.toast("Copied ${meta.id} with its licence")
+            } else {
+                session.platform.device.setClipboard(meta.id)
+                session.platform.device.toast("Copied ${meta.id}")
+            }
             true
         }
         return card
     }
+
+    private fun isImported(meta: AssetMeta): Boolean =
+        provenance(meta)?.origin == dev.lumen2d.core.assets.AssetOrigin.IMPORTED
 }
 
 /** Draws a decoded texture (or a colour swatch for non-image assets). */

@@ -277,9 +277,10 @@ object SampleInstaller {
     /** Copies `assets/packs/<id>` into writable storage so the user can edit an imported pack. */
     fun installPack(platform: AndroidPlatform, packsDirectory: File, id: String): Int {
         val vfs = platform.bundledFileSystem
+        val packRoot = "${AndroidPlatform.LIBRARY_FOLDER}/$id"
         var copied = 0
-        for (file in vfs.walk(id)) {
-            val relative = file.removePrefix("$id/")
+        for (file in vfs.walk(packRoot)) {
+            val relative = file.removePrefix("$packRoot/")
             val destination = File(packsDirectory, "$id/$relative")
             destination.parentFile?.mkdirs()
             runCatching {

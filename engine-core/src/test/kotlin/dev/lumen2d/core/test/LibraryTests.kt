@@ -14,10 +14,15 @@ import dev.lumen2d.core.assets.AssetDatabase
 import dev.lumen2d.core.assets.AssetLibrary
 import dev.lumen2d.core.assets.AssetOrigin
 import dev.lumen2d.core.assets.AssetSourceIndex
+import dev.lumen2d.core.game.Game
+import dev.lumen2d.core.game.Project
+import dev.lumen2d.core.platform.AudioOutput
 import dev.lumen2d.core.platform.FileFileSystem
 import dev.lumen2d.core.platform.InMemoryFileSystem
+import dev.lumen2d.core.platform.LocalPlatform
 import dev.lumen2d.core.render.PngCodec
 import dev.lumen2d.core.render.Texture2D
+import dev.lumen2d.core.tiles.TileMapNode
 import dev.lumen2d.core.tiles.TileSet
 import dev.lumen2d.core.util.Json
 import dev.lumen2d.core.util.int
@@ -46,6 +51,7 @@ fun libraryTests() {
     shippedLibraryTests()
     importedPackTests()
     sampleReferenceTests()
+    tilemapTextureTests()
 }
 
 // ------------------------------------------------------------------------ in-memory provenance
@@ -283,6 +289,61 @@ private fun importedPackTests() = T.test("asset sources: the imported pack keeps
     T.check(set.regionFor(180) == null, "tiles beyond the sheet do not slice")
 }
 
+// ------------------------------------- a project's declared packs are what `lib://` resolves to
+
+/**
+ * The "invisible tileset" regression: two packs in the library both contain a `tileset.png`, and a
+ * project that declares `lib://packs/base` must resolve the *base* one — by path, not by file name
+ * — and end up with a textured tilemap that actually draws.
+ */
+private fun tilemapTextureTests() = T.test("a declared pack resolves by path and textures its tilemap") {
+    val libraryRoot = findLibraryRoot() ?: return@test
+    val repository = findRepositoryRoot() ?: return@test
+    val gameDirectory = File(repository, "sample-games/pixel-platformer")
+    if (!File(gameDirectory, Project.MANIFEST).isFile) return@test
+
+    val project = Project.open(FileFileSystem(gameDirectory), "", "project://")!!
+    val scratch = File(System.getProperty("java.io.tmpdir"), "lumen2d-library-test")
+    val platform = object : LocalPlatform("test", scratch, libraryRoot.absolutePath) {
+        // Silent sink: the test exercises asset resolution, not audio.
+        override fun createAudioOutput(sampleRate: Int, channels: Int): AudioOutput? = null
+    }
+    val game = Game(platform, project)
+    game.useSoftwareRenderer(1f)
+
+    val roots = game.assetScanRoots()
+    T.check(roots.any { it.first == "lib://" && it.second == "packs/base" },
+        "the declared pack becomes a scan root (${roots})")
+    T.check(roots.any { it.first == "project://" }, "the project folder is a scan root")
+
+    game.start()
+    val tileset = game.database.find("lib://packs/base/tiles/tileset.png")
+    T.check(tileset != null, "the declared pack's tileset resolves")
+    T.eq("packs/base/tiles/tileset.png", tileset?.path, "resolution is by path, not by matching the file name")
+    T.eq(
+        "base:sprites/player.png",
+        game.database.find("lib://packs/base/sprites/player.png")?.id,
+        "pack art resolves to its canonical asset id",
+    )
+    T.check(
+        game.database.find("lib://packs/kenney/tiles/tileset.png") == null,
+        "a pack the project did not declare stays out of the database",
+    )
+
+    game.changeScene("scenes/level_1.scene.json")
+    repeat(10) { game.frame(1f / 60f) }
+    val tilemap = game.tree.root.descendants().filterIsInstance<TileMapNode>().firstOrNull()
+    T.check(tilemap != null, "the level ships a tilemap node")
+    val active = tilemap!!.tileMap.tileSet
+    T.check(active.texture != null, "the tilemap resolved its tileset texture")
+    T.eq("base:tiles/tileset.png", active.texture?.id, "the tilemap uses the declared pack's tileset")
+    T.eq(12, active.tileCount, "the base tileset describes 12 tiles")
+    T.check(active.regionFor(3) != null, "tiles slice out of the resolved texture")
+    val sprites = game.performanceSummary()["sprites"] ?: 0f
+    T.check(sprites > 50f, "the tilemap actually drew its tiles ($sprites sprites)")
+    game.stop()
+}
+
 // ------------------------------------------------- sample games resolve their library references
 
 private fun sampleReferenceTests() = T.test("sample games only reference library assets that exist") {
@@ -297,7 +358,7 @@ private fun sampleReferenceTests() = T.test("sample games only reference library
     }
 
     // One database over `lib://`, exactly like the runtime mounts the library.
-    val database = AssetDatabase(listOf("lib://" to FileFileSystem(libraryRoot)))
+    val database = AssetDatabase.of(listOf("lib://" to FileFileSystem(libraryRoot)))
     database.scan(extractMetadata = false)
     T.check(database.size > 20, "the library scans into the asset database (${database.size} assets)")
 

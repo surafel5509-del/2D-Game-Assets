@@ -155,15 +155,55 @@ class ScanResult(
 /**
  * The asset database: scanning, metadata, resolution and loading.
  */
+/**
+ * One mounted asset root.
+ *
+ * @param mount virtual scheme prefix the filesystem answers to (`project://`, `lib://`, `user://`),
+ * @param fileSystem the storage behind it,
+ * @param idRoot folder inside the filesystem that pack ids are relative to. Engine content is
+ *        mounted as `lib://` over the content root, which holds `packs/` and `sources/`; declaring
+ *        `idRoot = "packs"` keeps asset ids in their documented `pack:path` shape
+ *        (`base:sprites/player.png`) instead of leaking the folder layout (`packs:base/...`).
+ */
+class AssetMount(
+    val mount: String,
+    val fileSystem: VirtualFileSystem,
+    val idRoot: String = "",
+) {
+    /** Full virtual path of [path] inside this mount (`lib://packs/base/sprites/player.png`). */
+    fun virtualPath(path: String): String = mount + path.trimStart('/')
+
+    /** Strips [idRoot] so ids stay stable when content moves inside the filesystem. */
+    fun idPath(path: String): String {
+        val clean = path.trimStart('/')
+        if (idRoot.isEmpty()) return clean
+        return clean.removePrefix(idRoot.trim('/') + "/").ifEmpty { clean }
+    }
+}
+
 class AssetDatabase(
-    private val fileSystems: List<Pair<String, VirtualFileSystem>>,
+    private val mounts: List<AssetMount>,
     val textures: TextureManager = TextureManager(),
     val fonts: FontManager = FontManager(textures),
 ) {
     private val assets = LinkedHashMap<String, AssetMeta>()
     private val byPath = HashMap<String, String>()
+    /** Full virtual path (`lib://packs/base/sprites/player.png`) -> asset id. */
+    private val byVirtualPath = HashMap<String, String>()
     /** Mount prefix each asset id was discovered under ("project://", "lib://", ...). */
     private val mountOf = HashMap<String, String>()
+    companion object {
+        /**
+         * Builds a database over whole filesystems (no pack root), the shape simple callers and
+         * tests use: `AssetDatabase.of(listOf("lib://" to fileSystem))`.
+         */
+        fun of(
+            fileSystems: List<Pair<String, VirtualFileSystem>>,
+            textures: TextureManager = TextureManager(),
+            fonts: FontManager = FontManager(textures),
+        ): AssetDatabase = AssetDatabase(fileSystems.map { AssetMount(it.first, it.second) }, textures, fonts)
+    }
+
     private val audioCache = HashMap<String, AudioClip>()
     private val scriptCache = HashMap<String, String>()
     private val listeners = ArrayList<(AssetEvent) -> Unit>(4)
@@ -177,6 +217,9 @@ class AssetDatabase(
     fun get(id: String): AssetMeta? = assets[id]
     fun byPath(path: String): AssetMeta? = byPath[path]?.let { assets[it] }
 
+    /** Looks an asset up by the path a scene or script would write (`lib://packs/base/...`). */
+    fun byVirtualPath(path: String): AssetMeta? = byVirtualPath[path]?.let { assets[it] }
+
     /**
      * Finds an asset by any of the ways projects and scripts refer to one:
      *
@@ -187,13 +230,26 @@ class AssetDatabase(
      */
     fun find(reference: String): AssetMeta? {
         if (reference.isEmpty()) return null
+        // 1. an asset id (`base:sprites/player.png`) — the stable, unambiguous form,
         assets[reference]?.let { return it }
+        // 2. a full virtual path (`lib://packs/base/sprites/player.png`) — what scenes and scripts
+        //    write. Matching the whole path is what keeps two packs that both ship a `tileset.png`
+        //    apart: the reference either names a file that exists, or it resolves to nothing.
+        if (reference.contains("://")) {
+            byVirtualPath[reference]?.let { return assets[it] }
+            return null
+        }
+        // 3. a path relative to its mount (`sprites/player.png`, `scenes/level_1.scene.json`),
         byPath[reference]?.let { return assets[it] }
-        val path = reference.substringAfter("://", reference).trimStart('/')
+        val path = reference.trimStart('/')
         assets.values.firstOrNull { it.path == path }?.let { return it }
-        assets.values.firstOrNull { it.path.endsWith("/$path") || it.path == path }?.let { return it }
-        val name = path.substringAfterLast('/')
-        return assets.values.firstOrNull { it.fileName == name }
+        if (path.contains('/')) {
+            assets.values.firstOrNull { it.path.endsWith("/$path") }?.let { return it }
+            return null
+        }
+        // 4. a bare file name, the last resort that lets `textureId = "player.png"` work in a
+        //    freshly scaffolded project. Never used for paths, so it cannot cross packs.
+        return assets.values.firstOrNull { it.fileName == path }
     }
 
     /** Writes [reference]'s bytes into [target], flattening schemes and pack folders. */
@@ -249,7 +305,8 @@ class AssetDatabase(
         val seen = HashSet<String>()
 
         for ((mount, root) in roots) {
-            val fs = fileSystemFor(mount) ?: continue
+            val entry = mountFor(mount) ?: continue
+            val fs = entry.fileSystem
             val files = try { fs.walk(root.trimEnd('/')) } catch (t: Throwable) { errors.add("$mount: ${t.message}"); continue }
             for (rawPath in files) {
                 // Filesystem walks may hand back paths with a leading slash; ids and lookups
@@ -259,7 +316,7 @@ class AssetDatabase(
                 if (type == AssetType.UNKNOWN) continue
                 if (path.endsWith(".meta.json") || path.contains("/.thumbnails/")) continue
                 if (extractMetadata) type = sniffType(fs, path, type)
-                val id = idFor(mount, path)
+                val id = idFor(entry, path)
                 seen.add(id)
                 val existing = assets[id]
                 val size = runCatching { fs.size(path) }.getOrDefault(0L)
@@ -269,6 +326,7 @@ class AssetDatabase(
                     if (extractMetadata) readSidecar(meta, mount, path)
                     meta.tags.addAll(defaultTagsFor(meta))
                     assets[id] = meta; byPath[path] = id; mountOf[id] = mount
+                    byVirtualPath[entry.virtualPath(path)] = id
                     added.add(meta)
                 } else if (existing.sizeBytes != size) {
                     existing.sizeBytes = size
@@ -278,28 +336,35 @@ class AssetDatabase(
         }
         // Purge entries whose file disappeared.
         val removed = assets.keys.filter { it !in seen }
-        for (id in removed) { assets.remove(id); audioCache.remove(id); scriptCache.remove(id) }
+        for (id in removed) {
+            assets.remove(id); audioCache.remove(id); scriptCache.remove(id)
+            byVirtualPath.entries.removeAll { it.value == id }
+        }
         if (added.isNotEmpty() || removed.isNotEmpty()) emit(AssetEvent.DatabaseChanged)
         Log.i("Assets", "Scanned ${assets.size} assets (+${added.size} new, ${updated.size} changed, -${removed.size} removed)")
         return ScanResult(added, updated, unchanged, errors)
     }
 
     /** Default scan roots: the whole of every mounted filesystem. */
-    private fun defaultRoots(): List<Pair<String, String>> =
-        fileSystems.map { (mount, _) -> mount to "" }
+    private fun defaultRoots(): List<Pair<String, String>> = mounts.map { it.mount to "" }
 
-    private fun fileSystemFor(mount: String): VirtualFileSystem? =
-        fileSystems.firstOrNull { mount.startsWith(it.first) }?.second
+    /**
+     * The mount that answers [reference], longest match first, so `lib://packs/base` beats `lib://`.
+     */
+    private fun mountFor(reference: String): AssetMount? =
+        mounts.filter { reference.startsWith(it.mount) }.maxByOrNull { it.mount.length }
+
+    private fun fileSystemFor(reference: String): VirtualFileSystem? = mountFor(reference)?.fileSystem
 
     /**
      * Asset ids are `pack:relative/path.ext`. The pack is the first folder inside the mount
      * (asset packs and projects are folders), so ids stay stable when a pack is moved.
      */
-    private fun idFor(mount: String, path: String): String {
-        val clean = path.removePrefix(mount).trimStart('/')
+    private fun idFor(entry: AssetMount, path: String): String {
+        val clean = entry.idPath(path)
         val segments = clean.split('/').filter { it.isNotEmpty() }
         if (segments.isEmpty()) return clean
-        val mountName = mount.substringBefore("://").ifEmpty { "assets" }
+        val mountName = entry.mount.substringBefore("://").ifEmpty { "assets" }
         return if (segments.size == 1) "$mountName:${segments[0]}"
         else "${segments[0]}:${segments.drop(1).joinToString("/")}"
     }
@@ -389,17 +454,21 @@ class AssetDatabase(
             "assetCount" to assets.size,
             "assets" to assets.values.map { it.serialize() },
         )
-        val fs = fileSystems.firstOrNull()?.second
+        val fs = mounts.firstOrNull()?.fileSystem
         runCatching { fs?.writeText(path, Json.stringify(data)) }
     }
 
     fun loadCatalog(path: String) {
-        val fs = fileSystems.firstOrNull()?.second ?: return
+        val fs = mounts.firstOrNull()?.fileSystem ?: return
         if (!fs.exists(path)) return
         val data = runCatching { Json.parseObject(fs.readText(path)) }.getOrNull() ?: return
         for (entry in data.mapList("assets")) {
             val meta = AssetMeta.fromJson(entry)
-            if (meta.id.isNotEmpty()) { assets[meta.id] = meta; byPath[meta.path] = meta.id }
+            if (meta.id.isNotEmpty()) {
+                assets[meta.id] = meta
+                byPath[meta.path] = meta.id
+                mountFor(meta.path)?.let { byVirtualPath[it.virtualPath(meta.path)] = meta.id }
+            }
         }
     }
 
@@ -407,7 +476,7 @@ class AssetDatabase(
 
     fun resolve(meta: AssetMeta): VirtualFileSystem? {
         mountOf[meta.id]?.let { mount -> fileSystemFor(mount)?.let { return it } }
-        return fileSystemFor(meta.path) ?: fileSystems.firstOrNull()?.second
+        return fileSystemFor(meta.path) ?: mounts.firstOrNull()?.fileSystem
     }
 
     fun readBytes(id: String): ByteArray? {

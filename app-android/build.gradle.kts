@@ -79,10 +79,11 @@ kotlin {
 // ---------------------------------------------------------------- engine content
 //
 // The APK ships the engine's own generated content:
-//   assets/packs/base/**   the asset library, mounted as `lib://packs/base`
-//   assets/samples/**      the three sample games, seeded into app storage on first launch
+//   assets/packs/**        the asset library, mounted as `lib://packs` (base + imported packs)
+//   assets/sources/**      the per-file provenance index the editor shows next to an asset
+//   assets/samples/**      the sample games, seeded into app storage on first launch
 //
-// Both are regenerated from the engine itself (`--export-assets` / `--export-samples`, or
+// All of it is regenerated from the engine itself (`--export-assets` / `--export-samples`, or
 // `gradle :engine-desktop:exportContent`), so the APK can never ship content that the current
 // engine would not produce.
 val stageEngineContent by tasks.registering(Sync::class) {
@@ -90,6 +91,7 @@ val stageEngineContent by tasks.registering(Sync::class) {
     description = "Stages assets-library/ and sample-games/ into the APK's assets folder."
     dependsOn(":engine-desktop:exportContent")
     from(rootProject.file("assets-library/packs")) { into("packs") }
+    from(rootProject.file("assets-library/sources")) { into("sources") }
     from(rootProject.file("sample-games")) { into("samples") }
     into(layout.buildDirectory.dir("engine-content"))
 }

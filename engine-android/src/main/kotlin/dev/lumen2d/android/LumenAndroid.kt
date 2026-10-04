@@ -61,7 +61,7 @@ object LumenAndroid {
         val config = dev.lumen2d.core.game.GameConfig().also {
             it.title = title
             it.packageId = "dev.lumen2d.projects.${slug(title)}"
-            it.assetPacks = arrayListOf("lib://${AndroidPlatform.DEFAULT_BUNDLED_ROOT}/base")
+            it.assetPacks = arrayListOf("lib://${AndroidPlatform.BASE_PACK}")
         }
         val project = Project.create(FileFileSystem(directory), "", title, config)
         Log.i("Android", "Created project '${title}' at ${directory.absolutePath}")
@@ -75,6 +75,18 @@ object LumenAndroid {
         view.open(game)
         return game
     }
+
+    /**
+     * The engine's asset library as the editor sees it: the packs inside the APK plus the
+     * provenance index that says where every file came from (`lib://sources`).
+     */
+    @JvmStatic
+    fun library(platform: AndroidPlatform): dev.lumen2d.core.assets.AssetLibrary =
+        dev.lumen2d.core.assets.AssetLibrary.load(
+            platform.bundledFileSystem,
+            AndroidPlatform.LIBRARY_FOLDER,
+            AndroidPlatform.SOURCES_FOLDER,
+        )
 
     /** Folder holding every project the user created or imported. */
     @JvmStatic

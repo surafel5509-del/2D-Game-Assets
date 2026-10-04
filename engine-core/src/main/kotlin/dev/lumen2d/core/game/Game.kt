@@ -21,6 +21,7 @@ package dev.lumen2d.core.game
 
 import dev.lumen2d.core.assets.AssetDatabase
 import dev.lumen2d.core.assets.AssetMeta
+import dev.lumen2d.core.assets.AssetMount
 import dev.lumen2d.core.assets.AssetType
 import dev.lumen2d.core.audio.AudioMixer
 import dev.lumen2d.core.audio.AudioPump
@@ -422,6 +423,20 @@ class Game(
     /** Set by the host when the game should shut down (window closed, activity finished). */
     var quitRequested: Boolean = false
 
+    /** Every filesystem the engine can read: project, `lib://` (engine content) and `user://`. */
+    val mounts: List<Pair<String, VirtualFileSystem>>
+
+    /** True when the platform shipped an asset library (`lib://`), false in bare test harnesses. */
+    val hasLibrary: Boolean get() = platform.bundledFileSystem != null
+
+    companion object {
+        /**
+         * Folder inside the mounted engine content that holds the asset packs. Everything else in
+         * that mount (`sources/`, docs) stays out of asset ids.
+         */
+        const val LIBRARY_FOLDER: String = "packs"
+    }
+
     init {
         val mounts = ArrayList<Pair<String, VirtualFileSystem>>()
         project?.fileSystems?.forEach { mounts.add(it) }
@@ -434,7 +449,15 @@ class Game(
                 "will not resolve (start the app from the repository root, or set LUMEN2D_CONTENT).",
         )
         mounts.add("user://" to platform.userFileSystem)
-        database = AssetDatabase(mounts, textures)
+        this.mounts = mounts
+        // Library content lives under `packs/` (with the provenance index beside it in `sources/`),
+        // which must not leak into asset ids: they stay `base:sprites/player.png`.
+        database = AssetDatabase(
+            mounts.map { (mount, fileSystem) ->
+                AssetMount(mount, fileSystem, idRoot = if (mount.startsWith("lib://")) LIBRARY_FOLDER else "")
+            },
+            textures,
+        )
         resources = SceneResources(
             textures = textures, assets = database, audio = mixer, platform = platform,
         )
@@ -460,10 +483,45 @@ class Game(
     fun useSoftwareRenderer(scale: Float = 1f): SoftwareRenderer =
         SoftwareRenderer(config.designWidth, config.designHeight, scale).also { attachRenderer(it) }
 
+    /**
+     * Roots the asset database scans, as `(mount, path)` pairs: the project folder plus every pack
+     * the project declares in `assetPacks` (`lib://packs/base` and friends).
+     *
+     * Scanning only the declared packs keeps startup fast, keeps unrelated content out of the
+     * browser, and makes `lib://` paths resolve exactly as written in scene files — a project that
+     * references `lib://packs/base/sprites/player.png` only sees that file if it (or the engine's
+     * defaults) declared the pack. An empty `assetPacks` falls back to scanning every mount.
+     */
+    fun assetScanRoots(): List<Pair<String, String>> {
+        val roots = ArrayList<Pair<String, String>>()
+        project?.let { p ->
+            val mount = p.fileSystems.firstOrNull()?.first ?: "project://"
+            roots.add(mount to p.root.trimEnd('/'))
+        }
+        for (entry in config.assetPacks) {
+            if (entry.isBlank()) continue
+            val mount = mounts.map { it.first }
+                .filter { entry.startsWith(it) }
+                .maxByOrNull { it.length } ?: continue
+            roots.add(mount to entry.removePrefix(mount).trimStart('/').trimEnd('/'))
+        }
+        return roots
+    }
+
+    /** Escapes an asset-pack path for display, dropping empty roots. */
+    private fun describeRoot(root: Pair<String, String>): String =
+        if (root.second.isEmpty()) root.first else "${root.first}${root.second}"
+
     /** Scans project assets and loads the input map plus audio bus configuration. */
     fun prepare() {
         val index = project?.index()
-        database.scan(extractMetadata = true)
+        val roots = assetScanRoots()
+        if (roots.isEmpty() || config.assetPacks.isEmpty()) {
+            database.scan(extractMetadata = true)
+        } else {
+            database.scan(roots = roots, extractMetadata = true)
+            Log.i("Game", "Asset roots: ${roots.joinToString(", ") { describeRoot(it) }}")
+        }
         Log.i("Game", "Assets: ${database.size} (${index?.assetCount ?: 0} in project)")
         val bindings = project?.loadInputMap() ?: DefaultInputMap.bindings()
         tree.input.setBindings(bindings)

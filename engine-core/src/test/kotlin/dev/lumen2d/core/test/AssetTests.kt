@@ -69,7 +69,7 @@ fun assetTests() {
 
     test("scanning discovers assets and merges sidecar metadata") {
         val vfs = assetPackVfs()
-        val db = AssetDatabase(listOf("lib://" to vfs))
+        val db = AssetDatabase.of(listOf("lib://" to vfs))
         val result = db.scan(extractMetadata = true)
         check(result.added.any { it.id.contains("hero") }, "hero asset discovered, got ${result.added.map { it.id }}")
         val hero = db.all().first { it.path.contains("hero") }
@@ -85,7 +85,7 @@ fun assetTests() {
     }
 
     test("search filters by type, tag and text") {
-        val db = AssetDatabase(listOf("lib://" to assetPackVfs()))
+        val db = AssetDatabase.of(listOf("lib://" to assetPackVfs()))
         db.scan()
         check(db.search("hero").isNotEmpty(), "text search finds hero")
         check(db.search(tags = listOf("pixel")).isNotEmpty(), "tag search")
@@ -97,7 +97,7 @@ fun assetTests() {
 
     test("textures, atlases, audio, fonts and scenes load through the database") {
         val vfs = assetPackVfs()
-        val db = AssetDatabase(listOf("lib://" to vfs))
+        val db = AssetDatabase.of(listOf("lib://" to vfs))
         db.scan()
 
         val hero = db.all().first { it.path.endsWith("hero.png") }
@@ -125,7 +125,7 @@ fun assetTests() {
     }
 
     test("asset hashes, sizes and dependency graph") {
-        val db = AssetDatabase(listOf("lib://" to assetPackVfs()))
+        val db = AssetDatabase.of(listOf("lib://" to assetPackVfs()))
         db.scan()
         val hero = db.all().first { it.path.endsWith("hero.png") }
         val atlas = db.all().first { it.path.endsWith("atlas.json") }
@@ -141,7 +141,7 @@ fun assetTests() {
     }
 
     test("external images can be imported into a project") {
-        val db = AssetDatabase(listOf("project://" to InMemoryFileSystem()))
+        val db = AssetDatabase.of(listOf("project://" to InMemoryFileSystem()))
         val buffer = PixelBuffer(4, 4)
         for (y in 0 until 4) for (x in 0 until 4) buffer[x, y] = 0xFF123456.toInt()
         val decoded = db.decodeExternalPng(PngCodec.encode(buffer))!!
@@ -150,7 +150,7 @@ fun assetTests() {
     }
 
     test("empty databases behave predictably") {
-        val db = AssetDatabase(emptyList())
+        val db = AssetDatabase.of(emptyList())
         eq(0, db.size)
         check(db.search("anything").isEmpty(), "search on empty database is empty")
         check(db.loadAudio("missing") == null, "missing audio returns null")

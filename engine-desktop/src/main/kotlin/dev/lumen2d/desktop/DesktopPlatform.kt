@@ -123,11 +123,15 @@ class AwtFilePicker(private val parent: () -> java.awt.Frame? = { null }) : Plat
 }
 
 /**
- * Finds the asset library: the folder that contains the packs (`base/`, ...).
+ * Finds the engine content folder: the folder that *contains* the pack root `packs/` (and, when
+ * present, the provenance index in `sources/`).
  *
- * Looked up in order: an explicit `LUMEN2D_CONTENT` environment variable, the working directory
- * (repo checkout: `assets-library/packs` next to the sources), the folder above the jar, and
- * finally the per-user content folder the installer populates.
+ * Looked up in order: an explicit `LUMEN2D_CONTENT` environment variable, the working directory and
+ * its ancestors (a repo checkout has `assets-library/packs` next to the sources), a `packs/` folder
+ * next to the binary, and finally the per-user content folder the installer populates.
+ *
+ * The returned folder is mounted as `lib://`, so a scene that says
+ * `lib://packs/base/sprites/player.png` resolves through the same path on desktop and on Android.
  */
 fun defaultBundledRoot(baseDirectory: File): String {
     System.getenv("LUMEN2D_CONTENT")?.takeIf { it.isNotEmpty() }?.let { return it }
@@ -137,21 +141,21 @@ fun defaultBundledRoot(baseDirectory: File): String {
     var directory: File? = File("").absoluteFile
     var levels = 0
     while (directory != null && levels < 6) {
-        candidates.add(File(directory, "assets-library/packs"))
+        candidates.add(File(directory, "assets-library"))
         directory = directory.parentFile
         levels++
     }
-    candidates.add(File("packs"))
-    candidates.add(File(baseDirectory, "content/packs"))
-    return candidates.firstOrNull { File(it, "base/pack.json").isFile }?.absolutePath
-        ?: File(baseDirectory, "content/packs").absolutePath
+    candidates.add(File(""))
+    candidates.add(File(baseDirectory, "content"))
+    return candidates.firstOrNull { File(it, "packs/base/pack.json").isFile }?.absolutePath
+        ?: File(baseDirectory, "content").absolutePath
 }
 
 /** Desktop platform: real files, real audio, optional AWT dialogs. */
 class DesktopPlatform(
     /** Everything the app writes lives here (settings, saves, exported builds). */
     baseDirectory: File = File(System.getProperty("user.home"), ".lumen2d"),
-    /** Folder holding the bundled asset library (the repo's `assets-library/packs`). */
+    /** Engine content folder holding `packs/` (the repo's `assets-library`). */
     bundledRoot: String = defaultBundledRoot(baseDirectory),
 ) : LocalPlatform("desktop", baseDirectory, bundledRoot) {
 
