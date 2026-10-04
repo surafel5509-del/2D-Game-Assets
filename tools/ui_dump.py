@@ -9,6 +9,7 @@ Usage:
   tools/ui_dump.py find  <dump.xml> <label>      # prints "x y" centre of the first match
   tools/ui_dump.py count <dump.xml> <label>      # prints how many nodes match
   tools/ui_dump.py keys  <dump.xml>              # prints the distinct labels, comma separated
+  tools/ui_dump.py findclass <dump.xml> <class>  # prints "x y" centre of a node by widget class
 
 Matching is case-insensitive substring on either `text` or `content-desc`; `find` prefers an
 exact, clickable, on-screen match so that "Play" selects the button and not a game title
@@ -95,6 +96,22 @@ def main() -> int:
     if command == "count":
         print(sum(1 for _node, value in labels(root) if needle in value.lower()))
         return 0
+
+    if command == "findclass":
+        # An empty text field has no label to match on, so the widget class is the only handle.
+        view = screen(root)
+        found = [n for n in root.iter("node") if needle in (n.get("class") or "").lower()]
+        for pool in (
+            [n for n in found if on_screen(n, view) and clickable(n)],
+            [n for n in found if on_screen(n, view)],
+            found,
+        ):
+            for node in pool:
+                point = bounds(node)
+                if point:
+                    print(f"{point[0]} {point[1]}")
+                    return 0
+        return 1
 
     if command == "find":
         # A tap target has to be the *right* node: "Play" is a button, but "Pixel Platformer" also

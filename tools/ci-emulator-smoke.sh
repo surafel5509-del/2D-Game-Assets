@@ -437,6 +437,96 @@ if [ "$opened" = yes ]; then
   fi
 fi
 
+# ------------------------------------------------------------------ new project
+# The flow a user performs on their own phone: create a project from the hub and open it. A real
+# device crashed here while the sample-game path was fine, so it gets its own scenario.
+NEW_TITLE="DeviceTest"
+NEW_SLUG="devicetest"
+adb shell input keyevent KEYCODE_BACK > /dev/null 2>&1 || true
+sleep 4
+dump_hub
+TAP_NEW="$(python3 "$ROOT/tools/ui_dump.py" find "$WORK/hub.xml" "New project" 2>/dev/null || true)"
+if [ -z "$TAP_NEW" ]; then
+  record "new-project.button" no "no '+ New project' control in the hub dump"
+  failures=$((failures + 1))
+  annotate_ui_evidence
+else
+  adb shell input tap $TAP_NEW > /dev/null 2>&1 || true
+  sleep 4
+  dump_screen "$WORK/dialog.xml" "$WORK/dialog-texts.txt"
+  if grep -qF "Create" "$WORK/dialog-texts.txt"; then
+    record "new-project.dialog" yes "the New project dialog opened"
+    FIELD="$(python3 "$ROOT/tools/ui_dump.py" findclass "$WORK/dialog.xml" "EditText" 2>/dev/null || true)"
+    [ -n "$FIELD" ] && adb shell input tap $FIELD > /dev/null 2>&1
+    adb shell input text "$NEW_TITLE" > /dev/null 2>&1 || true
+    sleep 1
+    CREATE="$(python3 "$ROOT/tools/ui_dump.py" find "$WORK/dialog.xml" "Create" 2>/dev/null || true)"
+    if [ -z "$CREATE" ]; then
+      record "new-project.create" no "no Create button in the dialog dump: $(head -c 200 "$WORK/dialog-texts.txt" | tr '\n' '|')"
+      failures=$((failures + 1))
+    else
+      adb logcat -c > /dev/null 2>&1 || true
+      adb shell input tap $CREATE > /dev/null 2>&1 || true
+      created=no
+      for _ in $(seq 1 8); do
+        sleep 5
+        adb logcat -d -v brief > "$ROOT/ci-logs/logcat-new-project.txt" 2>/dev/null || true
+        if annotate_crash "$ROOT/ci-logs/logcat-new-project.txt"; then
+          record "new-project.opened" no "the app crashed while creating a project (see the annotation)"
+          failures=$((failures + 1))
+          break
+        fi
+        if focused_window | grep -q "StudioActivity"; then
+          created=yes
+          break
+        fi
+      done
+      if [ "$created" = yes ]; then
+        record "new-project.opened" yes "Create opened the new project in the studio — $(focused_window | cut -c1-120)"
+        adb exec-out screencap -p > "$SHOTS/new-project.png" 2>/dev/null || true
+        [ -s "$SHOTS/new-project.png" ] && record "new-project.screenshot" yes "$(wc -c < "$SHOTS/new-project.png") bytes → ci-logs/emulator-shots/new-project.png"
+        NEW_SCENE=""
+        for _ in $(seq 1 6); do
+          sleep 5
+          adb logcat -d -v brief > "$ROOT/ci-logs/logcat-new-project.txt" 2>/dev/null || true
+          NEW_SCENE="$(grep -E "Scene '?[^']*'? loaded" "$ROOT/ci-logs/logcat-new-project.txt" | tail -1)"
+          [ -n "$NEW_SCENE" ] && break
+        done
+        if [ -n "$NEW_SCENE" ]; then
+          record "new-project.scene" yes "${NEW_SCENE:0:150}"
+        else
+          record "new-project.scene" no "the engine never loaded a scene for the new project"
+          failures=$((failures + 1))
+        fi
+        # Back to the hub: the project has to be listed there (and still not crash).
+        adb shell input keyevent KEYCODE_BACK > /dev/null 2>&1 || true
+        sleep 4
+        dump_hub
+        if grep -qF "$NEW_TITLE" "$WORK/hub-texts.txt"; then
+          record "new-project.listed" yes "the hub lists '$NEW_TITLE' after returning from the editor"
+        else
+          record "new-project.listed" no "the hub does not list '$NEW_TITLE' after going back"
+          failures=$((failures + 1))
+          annotate_ui_evidence
+        fi
+        if annotate_crash "$ROOT/ci-logs/logcat-new-project.txt"; then
+          record "new-project.stable" no "the app crashed after creating the project"
+          failures=$((failures + 1))
+        else
+          record "new-project.stable" yes "no fatal exception while creating and opening a project"
+        fi
+      elif [ "$created" = no ]; then
+        record "new-project.opened" no "Create never reached the studio — $(focused_window | cut -c1-140)"
+        failures=$((failures + 1))
+        annotate_ui_evidence
+      fi
+    fi
+  else
+    record "new-project.dialog" no "no dialog with a Create button: $(head -c 200 "$WORK/dialog-texts.txt" | tr '\n' '|')"
+    failures=$((failures + 1))
+  fi
+fi
+
 echo "--------------------------------------------------------------"
 echo "on-device checks: $(( $(wc -l < "$RESULTS") - failures )) passed, $failures failed"
 echo "device screenshots: ci-logs/emulator-shots/"
