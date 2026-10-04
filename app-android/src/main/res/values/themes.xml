@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      Dark, chrome-free theme: the editor draws every pixel of its own UI (StudioTheme.kt), so the
+      framework only has to provide a sane window background and system bar colours.
+    -->
+    <style name="StudioTheme" parent="@android:style/Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/studio_bg</item>
+        <item name="android:colorAccent">@color/studio_accent</item>
+        <item name="android:statusBarColor">@color/studio_bg</item>
+        <item name="android:navigationBarColor">@color/studio_bg</item>
+        <item name="android:textColorPrimary">@color/studio_text</item>
+        <item name="android:textColorSecondary">@color/studio_text</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+</resources>

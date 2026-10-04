@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Lumen2D Studio</string>
+    <string name="studio_name">Lumen2D Editor</string>
+    <string name="hub_title">Projects</string>
+    <string name="new_project">New project</string>
+    <string name="import_project">Import .lumenzip</string>
+    <string name="play">Play</string>
+    <string name="edit">Edit</string>
+    <string name="export">Export</string>
+    <string name="save">Save</string>
+    <string name="undo">Undo</string>
+    <string name="redo">Redo</string>
+    <string name="samples_installed">Sample games installed</string>
+</resources>

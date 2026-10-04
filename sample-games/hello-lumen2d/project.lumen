@@ -1,0 +1,70 @@
+{
+  "format": "lumen2d.project",
+  "version": 1,
+  "name": "Hello Lumen2D",
+  "engine": "Lumen2D 1.0",
+  "savedAt": 1791082764095,
+  "config": {
+    "title": "Hello Lumen2D",
+    "version": "1.0.0",
+    "author": "Lumen2D samples",
+    "description": "The smallest complete Lumen2D game: a tilemap floor, a walking character and a camera.",
+    "packageId": "dev.lumen2d.samples.hello_lumen2d",
+    "display": {
+      "designWidth": 480,
+      "designHeight": 270,
+      "stretchMode": "fit",
+      "pixelArt": true,
+      "clearColor": "#0C0F19",
+      "orientation": "landscape",
+      "fullscreen": true,
+      "targetFps": 60,
+      "vsync": true
+    },
+    "gameplay": {
+      "gravity": [
+        0,
+        980
+      ],
+      "physicsTicksPerSecond": 60,
+      "maxDelta": 0.06666667014360428,
+      "timeScale": 1,
+      "startScene": "scenes/main.scene.json",
+      "autoloads": [],
+      "defaultFont": "pixel8",
+      "audioBuses": {
+        "Master": 1,
+        "Music": 0.699999988079071,
+        "SFX": 0.8999999761581421,
+        "UI": 0.800000011920929
+      },
+      "audioBusMutes": {}
+    },
+    "project": {
+      "assetPacks": [
+        "lib://packs/base"
+      ],
+      "physicsLayers": [
+        "player",
+        "enemy",
+        "world",
+        "pickup",
+        "hazard",
+        "projectile",
+        "trigger",
+        "ui"
+      ],
+      "tags": [
+        "player",
+        "enemy",
+        "pickup",
+        "goal",
+        "bullet"
+      ],
+      "debugDraw": false,
+      "showPerformance": false,
+      "saveSlots": 3,
+      "editorWidths": []
+    }
+  }
+}

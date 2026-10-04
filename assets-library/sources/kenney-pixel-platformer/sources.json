@@ -1,0 +1,47 @@
+{
+  "format": "lumen2d.asset-source-archive",
+  "version": 1,
+  "id": "kenney",
+  "packFolder": "kenney-pixel-platformer",
+  "name": "Kenney Pixel Platformer",
+  "upstream": "https://kenney.nl/assets/pixel-platformer",
+  "license": "CC0-1.0",
+  "author": "Kenney (www.kenney.nl)",
+  "archive": "kenney_pixel-platformer.zip",
+  "archiveSha256": "d01a196dbe3cc964e00d83ba3b987df6",
+  "tileWidth": 18,
+  "tileHeight": 18,
+  "spacing": 1,
+  "sheetColumns": 20,
+  "sheetRows": 9,
+  "packedSheet": "tilemap_packed.png",
+  "characterSheet": "tilemap-characters_packed.png",
+  "files": [
+    {
+      "name": "License.txt",
+      "bytes": 710,
+      "sha256": "79ab2b701fe8047758bec141b4613084"
+    },
+    {
+      "name": "Tilesheet (Characters).txt",
+      "bytes": 235,
+      "sha256": "2cb0a82a1c23469ae24faa8a943fdba1"
+    },
+    {
+      "name": "Tilesheet (Tiles).txt",
+      "bytes": 237,
+      "sha256": "91acf2150cbdebf28e9ef26255247b9c"
+    },
+    {
+      "name": "tilemap-characters_packed.png",
+      "bytes": 1990,
+      "sha256": "22622d54dfc9d85346c9b75b999c8604"
+    },
+    {
+      "name": "tilemap_packed.png",
+      "bytes": 5913,
+      "sha256": "a3bbff36594baa36c803a67e9152a20a"
+    }
+  ],
+  "licenseText": "Pixel Platformer (1.2)\n\n\tCreated/distributed by Kenney (www.kenney.nl)\n\tCreation date: 07-10-2023\n\n\t\t\t------------------------------\n\n\tLicense: (Creative Commons Zero, CC0)\n\thttp://creativecommons.org/publicdomain/zero/1.0/\n\n\tYou can use this content for personal, educational, and commercial purposes.\n\n\tSupport by crediting 'Kenney' or 'www.kenney.nl' (this is not a requirement)\n\n\t\t\t------------------------------\n\n\t• Website : www.kenney.nl\n\t• Donate  : www.kenney.nl/donate\n\n\t• Patreon : patreon.com/kenney\n\t\n\tFollow on social media for updates:\n\n\t• Twitter:\ttwitter.com/KenneyNL\n\t• Instagram: \tinstagram.com/kenney_nl\n\t• Mastodon:\tmastodon.gamedev.place/@kenney"
+}

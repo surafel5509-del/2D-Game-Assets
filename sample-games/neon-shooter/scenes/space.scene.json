@@ -1,0 +1,182 @@
+{
+  "format": "lumen2d.scene",
+  "version": 1,
+  "name": "Space",
+  "root": {
+    "type": "Node2D",
+    "name": "Space",
+    "children": [
+      {
+        "type": "Node2D",
+        "name": "Environment"
+      },
+      {
+        "type": "Node2D",
+        "name": "Gameplay",
+        "children": [
+          {
+            "type": "Sprite2D",
+            "name": "Stars",
+            "properties": {
+              "textureId": "lib://packs/base/fx/hills.png",
+              "color": "#38427F",
+              "position": [
+                240,
+                160
+              ],
+              "modulate": "#38427F"
+            }
+          },
+          {
+            "type": "CharacterBody2D",
+            "name": "Ship",
+            "properties": {
+              "position": [
+                240,
+                210
+              ]
+            },
+            "children": [
+              {
+                "type": "CollisionShape2D",
+                "name": "Body",
+                "properties": {
+                  "size": [
+                    14,
+                    14
+                  ]
+                }
+              },
+              {
+                "type": "Sprite2D",
+                "name": "Sprite",
+                "properties": {
+                  "textureId": "lib://packs/base/sprites/player.png",
+                  "hframes": 4,
+                  "vframes": 2,
+                  "frame": 1
+                }
+              }
+            ]
+          },
+          {
+            "type": "CPUParticles2D",
+            "name": "Muzzle",
+            "properties": {
+              "particleTextureId": "lib://packs/base/fx/spark.png",
+              "emitting": false,
+              "amount": 12,
+              "lifetime": 0.30000001192092896,
+              "speed": 90,
+              "startColor": "#8CE9FF",
+              "endColor": "#66B2FF00",
+              "position": [
+                240,
+                198
+              ],
+              "_particleConfig": {
+                "emitting": false,
+                "amount": 12,
+                "lifetime": 0.30000001192092896,
+                "lifetimeVariance": 0.20000000298023224,
+                "speed": 90,
+                "speedVariance": 30,
+                "direction": -1.5707963705062866,
+                "spread": 0.7853981852531433,
+                "gravity": [
+                  0,
+                  300
+                ],
+                "drag": 0.4000000059604645,
+                "angularVelocity": 0,
+                "startSize": 8,
+                "endSize": 0,
+                "sizeCurve": [
+                  1,
+                  0
+                ],
+                "startColor": "#8CE9FFFF",
+                "endColor": "#66B2FF00",
+                "blend": 1,
+                "shape": "POINT",
+                "shapeRadius": 8,
+                "shapeSize": [
+                  24,
+                  8
+                ],
+                "oneShot": false,
+                "burstCount": 0,
+                "burstInterval": 0.5,
+                "loopBurst": true,
+                "localSpace": true,
+                "collide": false,
+                "bounce": 0.4000000059604645,
+                "maxParticles": 256,
+                "seed": 12345
+              }
+            }
+          },
+          {
+            "type": "ScriptNode",
+            "name": "Behaviour",
+            "properties": {
+              "scriptPath": "scripts/game.lumen"
+            }
+          }
+        ]
+      },
+      {
+        "type": "Node2D",
+        "name": "UI",
+        "children": [
+          {
+            "type": "CanvasLayer",
+            "name": "HUD",
+            "children": [
+              {
+                "type": "Label",
+                "name": "Score",
+                "properties": {
+                  "text": "SCORE 0",
+                  "offsetLeft": 8,
+                  "offsetTop": 8,
+                  "minSize": [
+                    180,
+                    12
+                  ]
+                }
+              },
+              {
+                "type": "HudBar",
+                "name": "Lives",
+                "properties": {
+                  "iconTexture": "lib://packs/base/ui/coin_icon.png",
+                  "iconSize": 9,
+                  "anchorLeft": 1,
+                  "anchorRight": 1,
+                  "offsetLeft": -100,
+                  "offsetTop": 6,
+                  "offsetRight": -8,
+                  "minSize": [
+                    92,
+                    12
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "Camera2D",
+        "name": "Camera",
+        "properties": {
+          "position": [
+            240,
+            135
+          ]
+        }
+      }
+    ]
+  }
+}

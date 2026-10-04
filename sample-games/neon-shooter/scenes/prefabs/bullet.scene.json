@@ -1,0 +1,39 @@
+{
+  "format": "lumen2d.scene",
+  "version": 1,
+  "name": "Bullet",
+  "root": {
+    "type": "CharacterBody2D",
+    "name": "Bullet",
+    "properties": {
+      "groups": [
+        "bullet"
+      ]
+    },
+    "children": [
+      {
+        "type": "CollisionShape2D",
+        "name": "Body",
+        "properties": {
+          "size": [
+            4,
+            10
+          ]
+        }
+      },
+      {
+        "type": "Sprite2D",
+        "name": "Sprite",
+        "properties": {
+          "textureId": "lib://packs/base/ui/coin_icon.png",
+          "drawSize": [
+            4,
+            10
+          ],
+          "color": "#8CE9FF",
+          "modulate": "#8CE9FF"
+        }
+      }
+    ]
+  }
+}

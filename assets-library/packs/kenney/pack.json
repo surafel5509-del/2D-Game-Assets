@@ -1,0 +1,19 @@
+{
+  "id": "kenney",
+  "name": "Kenney Pixel Platformer",
+  "description": "CC0 pixel-art platformer kit (18x18 tiles + characters) by Kenney.",
+  "version": "1.2.0",
+  "license": "CC0-1.0",
+  "author": "Kenney (www.kenney.nl)",
+  "engine": "1.0.0",
+  "tags": [
+    "pixel-art",
+    "18x18",
+    "platformer",
+    "cc0"
+  ],
+  "files": [
+    "sprites/characters.png",
+    "tiles/tileset.png"
+  ]
+}

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="studio_bg">#0C0F19</color>
+    <color name="studio_panel">#141A28</color>
+    <color name="studio_accent">#6C8CFF</color>
+    <color name="studio_mint">#7CF7C4</color>
+    <color name="studio_text">#E6EBFF</color>
+</resources>

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  engine-android — Lumen2D's Android backends.
+  A library module: it declares no components of its own, only the runtime classes and the
+  engine content (asset packs + sample games) that is packaged into `assets/`.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-feature
+        android:name="android.hardware.touchscreen"
+        android:required="false" />
+
+    <uses-permission android:name="android.permission.VIBRATE" />
+
+    <application android:hasCode="true" />
+
+</manifest>

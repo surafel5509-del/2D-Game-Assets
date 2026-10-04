@@ -1,0 +1,20 @@
+{
+  "displayName": "Tileset (Kenney)",
+  "tags": [
+    "tileset",
+    "terrain",
+    "kenney"
+  ],
+  "license": "CC0-1.0",
+  "author": "Kenney (www.kenney.nl)",
+  "source": "Kenney Pixel Platformer source archive",
+  "sourceUrl": "https://kenney.nl/assets/pixel-platformer",
+  "importSettings": {
+    "tileWidth": 18,
+    "tileHeight": 18,
+    "columns": 20,
+    "rows": 9,
+    "spacing": 0,
+    "source": "Tilemap/tilemap_packed.png"
+  }
+}

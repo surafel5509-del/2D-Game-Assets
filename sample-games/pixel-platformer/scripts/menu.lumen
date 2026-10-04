@@ -1,0 +1,6 @@
+# Title screen: any accept/fire press starts the level.
+func process(delta) {
+    if input.just_pressed("ui_accept") or input.just_pressed("fire") or input.just_pressed("jump") {
+        change_scene("scenes/level_1.scene.json")
+    }
+}

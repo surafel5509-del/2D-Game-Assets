@@ -1,0 +1,30 @@
+# Hello Lumen2D — the player controller from the quick-start guide.
+export var speed = 110.0
+export var jump_force = 300.0
+var coyote = 0.0
+
+func ready() {
+    print("Hello from LumenScript!")
+}
+
+func physics_process(delta) {
+    var body = get_node("Player")
+    var axis = input.axis("move")
+
+    body.velocity.x = axis.x * speed
+    body.velocity.y += 900.0 * delta                      # gravity
+
+    if body.on_floor {
+        coyote = 0.1                                      # coyote time, in seconds
+    } else {
+        coyote = max(0.0, coyote - delta)
+    }
+
+    if input.just_pressed("jump") and coyote > 0.0 {
+        body.velocity.y = -jump_force
+        coyote = 0.0
+        play_sound("lib://packs/base/audio/jump.wav")
+    }
+
+    body.move_and_slide(delta)
+}

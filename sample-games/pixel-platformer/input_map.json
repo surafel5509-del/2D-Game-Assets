@@ -1,0 +1,152 @@
+{
+  "format": "lumen2d.input_map",
+  "version": 1,
+  "bindings": [
+    {
+      "action": "move_left",
+      "source": "keyboard",
+      "key": "LEFT",
+      "deadZone": 0.20000000298023224,
+      "rect": null
+    },
+    {
+      "action": "move_left",
+      "source": "keyboard",
+      "key": "KEY_A",
+      "deadZone": 0.20000000298023224,
+      "rect": null
+    },
+    {
+      "action": "move_right",
+      "source": "keyboard",
+      "key": "RIGHT",
+      "deadZone": 0.20000000298023224,
+      "rect": null
+    },
+    {
+      "action": "move_right",
+      "source": "keyboard",
+      "key": "KEY_D",
+      "deadZone": 0.20000000298023224,
+      "rect": null
+    },
+    {
+      "action": "move_up",
+      "source": "keyboard",
+      "key": "UP",
+      "deadZone": 0.20000000298023224,
+      "rect": null
+    },
+    {
+      "action": "move_up",
+      "source": "keyboard",
+      "key": "KEY_W",
+      "deadZone": 0.20000000298023224,
+      "rect": null
+    },
+    {
+      "action": "move_down",
+      "source": "keyboard",
+      "key": "DOWN",
+      "deadZone": 0.20000000298023224,
+      "rect": null
+    },
+    {
+      "action": "move_down",
+      "source": "keyboard",
+      "key": "KEY_S",
+      "deadZone": 0.20000000298023224,
+      "rect": null
+    },
+    {
+      "action": "jump",
+      "source": "keyboard",
+      "key": "SPACE",
+      "deadZone": 0.20000000298023224,
+      "rect": null
+    },
+    {
+      "action": "jump",
+      "source": "keyboard",
+      "key": "KEY_Z",
+      "deadZone": 0.20000000298023224,
+      "rect": null
+    },
+    {
+      "action": "fire",
+      "source": "keyboard",
+      "key": "KEY_X",
+      "deadZone": 0.20000000298023224,
+      "rect": null
+    },
+    {
+      "action": "fire",
+      "source": "keyboard",
+      "key": "KEY_J",
+      "deadZone": 0.20000000298023224,
+      "rect": null
+    },
+    {
+      "action": "pause",
+      "source": "keyboard",
+      "key": "ESCAPE",
+      "deadZone": 0.20000000298023224,
+      "rect": null
+    },
+    {
+      "action": "ui_accept",
+      "source": "keyboard",
+      "key": "ENTER",
+      "deadZone": 0.20000000298023224,
+      "rect": null
+    },
+    {
+      "action": "move_left",
+      "source": "virtual",
+      "key": "NONE",
+      "deadZone": 0.20000000298023224,
+      "rect": [
+        8,
+        200,
+        40,
+        40
+      ]
+    },
+    {
+      "action": "move_right",
+      "source": "virtual",
+      "key": "NONE",
+      "deadZone": 0.20000000298023224,
+      "rect": [
+        56,
+        200,
+        40,
+        40
+      ]
+    },
+    {
+      "action": "jump",
+      "source": "virtual",
+      "key": "NONE",
+      "deadZone": 0.20000000298023224,
+      "rect": [
+        400,
+        200,
+        44,
+        44
+      ]
+    },
+    {
+      "action": "fire",
+      "source": "virtual",
+      "key": "NONE",
+      "deadZone": 0.20000000298023224,
+      "rect": [
+        352,
+        206,
+        40,
+        40
+      ]
+    }
+  ]
+}

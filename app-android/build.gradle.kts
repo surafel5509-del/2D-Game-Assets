@@ -1,0 +1,99 @@
+// app-android — Lumen2D Studio: project manager + full 2D editor + game runtime.
+plugins {
+    alias(libs.plugins.android.application)
+    alias(libs.plugins.kotlin.android)
+}
+
+android {
+    namespace = "dev.lumen2d.studio"
+    compileSdk = 36
+
+    defaultConfig {
+        applicationId = "dev.lumen2d.studio"
+        minSdk = 24
+        targetSdk = 36
+        versionCode = 1
+        versionName = "1.0.0"
+    }
+
+    signingConfigs {
+        // Release APKs are signed with the debug keystore unless a real one is supplied
+        // through CI secrets / local.properties, so every CI build is installable on-device.
+        create("ciRelease") {
+            val storePath = System.getenv("LUMEN_KEYSTORE") ?: "${System.getProperty("user.home")}/.android/debug.keystore"
+            if (file(storePath).exists()) {
+                storeFile = file(storePath)
+                storePassword = System.getenv("LUMEN_KEYSTORE_PASSWORD") ?: "android"
+                keyAlias = System.getenv("LUMEN_KEY_ALIAS") ?: "androiddebugkey"
+                keyPassword = System.getenv("LUMEN_KEY_PASSWORD") ?: "android"
+            }
+        }
+    }
+
+    buildTypes {
+        debug {
+            applicationIdSuffix = ".debug"
+            isMinifyEnabled = false
+        }
+        release {
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            signingConfig = signingConfigs.getByName("ciRelease")
+        }
+    }
+
+    buildFeatures {
+        // The editor UI is hand-drawn from framework views (see StudioTheme.kt): no Compose, no
+        // Material, nothing that can drift from the engine's own rendering.
+        buildConfig = false
+    }
+
+    packaging {
+        resources.excludes += setOf("/META-INF/{AL2.0,LGPL2.1}", "META-INF/DEPENDENCIES")
+    }
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    androidResources {
+        // Engine content ships uncompressed so the runtime can mmap/decode assets quickly.
+        noCompress += listOf("wav", "png", "json", "lumen", "tmx", "tsx", "fnt")
+    }
+}
+
+dependencies {
+    implementation(project(":engine-core"))
+    implementation(project(":engine-android"))
+
+    // FileProvider (sharing exported .lumenzip archives) is the only androidx API used.
+    implementation(libs.androidx.core.ktx)
+}
+
+kotlin {
+    compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17) }
+}
+
+// ---------------------------------------------------------------- engine content
+//
+// The APK ships the engine's own generated content:
+//   assets/packs/base/**   the asset library, mounted as `lib://packs/base`
+//   assets/samples/**      the three sample games, seeded into app storage on first launch
+//
+// Both are regenerated from the engine itself (`--export-assets` / `--export-samples`, or
+// `gradle :engine-desktop:exportContent`), so the APK can never ship content that the current
+// engine would not produce.
+val stageEngineContent by tasks.registering(Sync::class) {
+    group = "build"
+    description = "Stages assets-library/ and sample-games/ into the APK's assets folder."
+    dependsOn(":engine-desktop:exportContent")
+    from(rootProject.file("assets-library/packs")) { into("packs") }
+    from(rootProject.file("sample-games")) { into("samples") }
+    into(layout.buildDirectory.dir("engine-content"))
+}
+
+android.sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("engine-content"))
+
+tasks.named("preBuild") { dependsOn(stageEngineContent) }
