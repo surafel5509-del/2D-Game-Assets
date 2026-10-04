@@ -332,11 +332,18 @@ jobs:
             cat build/recheck-release.md
             echo
             echo "</details>"
-            if [ -f build/device/emulator-report.md ]; then
+            # The artifact unpacks with the paths it was uploaded from, so look for the report
+            # instead of assuming where it landed.
+            DEVICE_REPORT="$(find build/device -name 'emulator-report.md' 2>/dev/null | head -1)"
+            if [ -n "$DEVICE_REPORT" ]; then
               echo "<details><summary>On-device verification — emulator</summary>"
               echo
-              cat build/device/emulator-report.md
+              cat "$DEVICE_REPORT"
               echo
+              for shot in hub editor; do
+                echo "![device-$shot](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/download/${TAG}/device-$shot.png)"
+                echo
+              done
               echo "</details>"
             fi
           } > build/release-notes.md
@@ -345,4 +352,15 @@ jobs:
             gh release create "$TAG" --title "$TITLE" $PRERELEASE --notes-file build/release-notes.md
           gh release edit "$TAG" --title "$TITLE" --notes-file build/release-notes.md
           gh release upload "$TAG" $(find build/apk -name '*.apk' | tr '\n' ' ') --clobber
+
+          # The on-device screenshots are the visual proof that the APK ran on a device; ship them
+          # with the release so they can be looked at without digging through workflow artifacts.
+          mkdir -p build/release
+          for shot in $(find build/device -name '*.png' 2>/dev/null); do
+            cp "$shot" "build/release/device-$(basename "$shot")"
+          done
+          SHOTS="$(find build/release -name 'device-*.png' | tr '\n' ' ')"
+          if [ -n "$SHOTS" ]; then
+            gh release upload "$TAG" $SHOTS --clobber
+          fi
           gh release view "$TAG" --json assets --jq '.assets[] | "\(.name)  \(.size) bytes"'

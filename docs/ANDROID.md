@@ -106,7 +106,8 @@ does not simply build the APK — it verifies it:
    uploaded as `lumen2d-device-screenshots`.
 5. **Re-verify the artifacts and publish the release** — downloads the uploaded APKs, verifies them a
    second time independently, and refreshes the **latest-build** release (or the tag release) with
-   the APKs, their SHA-256 checksums and both verification reports in the release notes.
+   the APKs, their SHA-256 checksums, both verification reports and the on-device report in the
+   release notes, plus the emulator screenshots as `device-hub.png` / `device-editor.png` assets.
 
 The APK is therefore only published after it has been inspected statically *and* executed on a
 device. `docs/BUILDING.md` §6 documents the individual checks and how to run them locally.

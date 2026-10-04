@@ -124,7 +124,7 @@ verified.**
 | **Asset library, samples and previews** | regenerating `assets-library/`/`sample-games/` changes nothing (committed content == engine output), every sample runs headlessly, the seven previews render, and the APK verifier's own self-test passes |
 | **Build and verify the Android APK** | SDK 36 assembles debug + release; both APKs pass the static verification below |
 | **Install and run the APK on an emulator** | a headless API 30 emulator installs the debug APK, the hub launches and lists all three bundled samples, and playing one makes the engine log a scene load |
-| **Re-verify the artifacts and publish the release** | the *uploaded* APKs are downloaded and verified again independently, then published as the rolling `latest-build` release with checksums and both verification reports in the notes |
+| **Re-verify the artifacts and publish the release** | the *uploaded* APKs are downloaded and verified again independently, then published as the rolling `latest-build` release with checksums, both verification reports and the device report in the notes, and the emulator screenshots as release assets |
 
 Every build step runs through `tools/ci-run.sh`, which tees its output to `ci-logs/` (uploaded as an
 artifact) and turns a failure into GitHub annotations plus a step summary — a red run can be
