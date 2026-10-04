@@ -267,11 +267,16 @@ class Project(
 
     // ------------------------------------------------------------- persistence
 
-    fun save() {
+    /**
+     * Writes `project.lumen`. [savedAtMillis] defaults to now; tools that generate projects
+     * (the sample-game exporter, CI) pass a fixed value so regenerating content is byte-for-byte
+     * reproducible and a stale check-in is visible as a diff.
+     */
+    fun save(savedAtMillis: Long = System.currentTimeMillis()) {
         val manifest = linkedMapOf<String, Any?>(
             "format" to FORMAT, "version" to VERSION, "name" to name,
             "engine" to "Lumen2D 1.0",
-            "savedAt" to System.currentTimeMillis(),
+            "savedAt" to savedAtMillis,
             "config" to config.serialize(),
         )
         vfs.mkdirs(root)

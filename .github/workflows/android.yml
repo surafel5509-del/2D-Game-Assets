@@ -1,5 +1,12 @@
 name: Lumen2D Engine CI
 
+# Engine core tests, generated content freshness, the Android APK build, and — the part
+# that matters for a shippable engine — verification of the artifact: static verification
+# of the APK's contents plus an emulator run that installs it and plays a bundled sample.
+#
+# Every build step runs through tools/ci-run.sh, which turns failures into annotations and
+# a step summary, so a red run is diagnosable from the run page itself.
+
 on:
   push:
     branches: [ main, 'arena/**' ]
@@ -8,7 +15,11 @@ on:
   workflow_dispatch:
     inputs:
       publish_release:
-        description: 'Publish/refresh the "latest-build" release with the APK'
+        description: 'Publish/refresh the "latest-build" release with the verified APKs'
+        type: boolean
+        default: true
+      emulator_smoke:
+        description: 'Install and run the APK on an Android emulator'
         type: boolean
         default: true
 
@@ -19,101 +30,317 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  GRADLE_VERSION: '8.14.3'
+  ANDROID_PLATFORM: 'android-36'
+  ANDROID_BUILD_TOOLS: '36.0.0'
+  ANDROID_EMULATOR_API: '30'
+
 jobs:
-  test-core:
+  # ---------------------------------------------------------------- engine core
+  engine-core:
     name: Engine core tests (JVM)
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '17'
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v6
         with:
           gradle-version: '8.14.3'
-      - name: Run engine-core test suite
-        run: gradle :engine-core:engineTests --stacktrace
+      - name: Run the engine-core test suite
+        run: tools/ci-run.sh --name engine-tests gradle :engine-core:engineTests --stacktrace
+      - name: Upload failure logs
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ci-logs-engine-core
+          path: ci-logs/
+          if-no-files-found: ignore
 
-  build-android:
-    name: Build Android APK
+  # ------------------------------------------------------------- generated content
+  engine-content:
+    name: Asset library, samples and previews
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '17'
-      - uses: android-actions/setup-android@v3
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v6
         with:
           gradle-version: '8.14.3'
 
-      - name: Install SDK packages
+      - name: Regenerate the asset library and the sample games
+        run: tools/ci-run.sh --name export-content gradle :engine-desktop:exportContent --stacktrace
+
+      - name: Check that the committed content matches the engine
+        run: |
+          if ! git diff --exit-code -- assets-library sample-games; then
+            echo "::error title=Generated content is stale::The committed assets-library/sample-games differ from the engine's output. Run 'gradle :engine-desktop:exportContent' and commit the result."
+            git --no-pager diff --stat -- assets-library sample-games
+            exit 1
+          fi
+          echo "committed content matches the engine output"
+
+      - name: Headless smoke check of every sample game
+        run: tools/ci-run.sh --name sample-checks gradle :engine-desktop:checkSamples --stacktrace
+
+      - name: Render the preview screenshots
+        run: tools/ci-run.sh --name previews gradle :engine-desktop:run --args="--demo all --out build/preview"
+
+      - name: Self-test the APK verifier (no SDK required)
+        run: tools/ci-run.sh --name apk-verifier-selftest tools/verify-apk-selftest.sh
+
+      - name: Upload the rendered previews
+        uses: actions/upload-artifact@v7
+        with:
+          name: desktop-renderer-preview
+          path: engine-desktop/build/preview
+          if-no-files-found: error
+      - name: Upload failure logs
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ci-logs-engine-content
+          path: ci-logs/
+          if-no-files-found: ignore
+
+  # ------------------------------------------------------------------- Android APK
+  android-apk:
+    name: Build and verify the Android APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: '8.14.3'
+
+      - name: Locate the runner's Android SDK
+        run: |
+          SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          CMDLINE="$(ls -d "$SDK"/cmdline-tools/*/bin 2>/dev/null | sort -V | tail -1)"
+          if [ -z "$CMDLINE" ]; then
+            echo "::error title=Android SDK::cmdline-tools not found under $SDK"
+            ls -la "$SDK" || true
+            exit 1
+          fi
+          {
+            echo "ANDROID_HOME=$SDK"
+            echo "ANDROID_SDK_ROOT=$SDK"
+            echo "PATH=$CMDLINE:$SDK/platform-tools:$SDK/emulator:$PATH"
+          } >> "$GITHUB_ENV"
+          echo "sdk.dir=$SDK" > local.properties
+          "$CMDLINE/sdkmanager" --version
+
+      - name: Install the SDK packages the build needs
         run: |
           yes | sdkmanager --licenses > /dev/null || true
-          sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0"
+          tools/ci-run.sh --name sdk-packages sdkmanager --install \
+            "platforms;${ANDROID_PLATFORM}" "build-tools;${ANDROID_BUILD_TOOLS}" "platform-tools"
 
-      - name: Generate Gradle wrapper
-        run: gradle wrapper --gradle-version 8.14.3
+      - name: Create the keystore used to sign the release build
+        run: |
+          mkdir -p "$HOME/.android"
+          if [ ! -f "$HOME/.android/debug.keystore" ]; then
+            keytool -genkeypair -v -keystore "$HOME/.android/debug.keystore" \
+              -storepass android -keypass android -alias androiddebugkey \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US"
+          fi
 
-      - name: Assemble debug + release APKs
-        run: ./gradlew :app-android:assembleDebug :app-android:assembleRelease --stacktrace
+      - name: Assemble the debug and release APKs
+        run: tools/ci-run.sh --name assemble gradle :app-android:assembleDebug :app-android:assembleRelease --stacktrace
 
-      - name: Show APK outputs
-        run: find app-android/build/outputs -name '*.apk' -exec ls -lh {} \;
+      - name: Verify the debug APK
+        run: tools/verify-apk.sh app-android/build/outputs/apk/debug/*.apk --expect debug --report build/apk-report-debug.md
 
-      - name: Show staged engine content
-        run: find app-android/build/engine-content -maxdepth 2 -mindepth 1 | sort
+      - name: Verify the release APK
+        run: tools/verify-apk.sh app-android/build/outputs/apk/release/*.apk --expect release --report build/apk-report-release.md
 
-      - name: Upload APKs
-        uses: actions/upload-artifact@v4
+      - name: List the artifacts
+        run: |
+          ls -lh app-android/build/outputs/apk/debug/*.apk app-android/build/outputs/apk/release/*.apk
+          find app-android/build/engine-content -maxdepth 2 -mindepth 1 | sort
+
+      - name: Upload the APKs, the verification reports and the logs
+        uses: actions/upload-artifact@v7
         with:
           name: lumen2d-studio-apk
           path: |
             app-android/build/outputs/apk/debug/*.apk
             app-android/build/outputs/apk/release/*.apk
+            build/apk-report-*.md
+            ci-logs/
           if-no-files-found: error
 
-      - name: Publish rolling release with the APK
-        if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/arena/') || startsWith(github.ref, 'refs/tags/v') || inputs.publish_release)
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || 'latest-build' }}
-          name: ${{ startsWith(github.ref, 'refs/tags/v') && format('Lumen2D Studio {0}', github.ref_name) || 'Lumen2D Studio — latest build' }}
-          prerelease: ${{ !startsWith(github.ref, 'refs/tags/v') }}
-          body: |
-            ### Lumen2D Studio — Android 2D game engine & editor
-
-            Install `app-android-debug.apk` (debug-signed) **or** `app-android-release.apk`
-            on any Android 7.0+ (API 24) device, then open the built-in
-            **Asset Library** and **Sample Games** to try the engine.
-
-            Built from commit ${{ github.sha }} by Lumen2D Engine CI.
-          files: |
-            app-android/build/outputs/apk/debug/*.apk
-            app-android/build/outputs/apk/release/*.apk
-
-  desktop-preview:
-    name: Desktop renderer smoke test
+  # --------------------------------------------------------------- on-device check
+  android-emulator:
+    name: Install and run the APK on an emulator
+    needs: android-apk
+    if: github.event_name != 'pull_request' && inputs.emulator_smoke != false
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '17'
-      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Locate the runner's Android SDK
+        run: |
+          SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          CMDLINE="$(ls -d "$SDK"/cmdline-tools/*/bin 2>/dev/null | sort -V | tail -1)"
+          {
+            echo "ANDROID_HOME=$SDK"
+            echo "ANDROID_SDK_ROOT=$SDK"
+            echo "PATH=$CMDLINE:$SDK/platform-tools:$SDK/emulator:$PATH"
+          } >> "$GITHUB_ENV"
+
+      - uses: actions/download-artifact@v8
         with:
-          gradle-version: '8.14.3'
-      - name: Regenerate the asset library and the sample games
-        run: gradle :engine-desktop:exportContent --stacktrace
-      - name: Headless smoke check of every sample game
-        run: gradle :engine-desktop:checkSamples --stacktrace
-      - name: Render sample-game screenshots headlessly
-        run: gradle :engine-desktop:run --args="--demo all --out build/preview" --stacktrace
-      - uses: actions/upload-artifact@v4
+          name: lumen2d-studio-apk
+          path: build/apk
+
+      - name: Install and play the debug APK on a headless emulator
+        run: |
+          APK="$(find build/apk -name '*-debug.apk' | head -1)"
+          echo "verifying $APK"
+          tools/ci-emulator-smoke.sh "$APK" \
+            --package dev.lumen2d.studio.debug \
+            --api "${ANDROID_EMULATOR_API}" \
+            --report build/emulator-report.md \
+            --shots ci-logs/emulator-shots
+
+      - name: Upload the device screenshots and the report
+        if: always()
+        uses: actions/upload-artifact@v7
         with:
-          name: desktop-renderer-preview
-          path: engine-desktop/build/preview
+          name: lumen2d-device-screenshots
+          path: |
+            ci-logs/emulator-shots/
+            build/emulator-report.md
+            ci-logs/logcat*.txt
+            ci-logs/emulator.log
           if-no-files-found: ignore
+
+  # ------------------------------------------------------------ verify and publish
+  publish:
+    name: Re-verify the artifacts and publish the release
+    needs: [ android-apk, android-emulator ]
+    if: |
+      always() &&
+      needs.android-apk.result == 'success' &&
+      (needs.android-emulator.result == 'success' || needs.android-emulator.result == 'skipped') &&
+      github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Locate the runner's Android SDK
+        run: |
+          SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          CMDLINE="$(ls -d "$SDK"/cmdline-tools/*/bin 2>/dev/null | sort -V | tail -1)"
+          {
+            echo "ANDROID_HOME=$SDK"
+            echo "PATH=$CMDLINE:$SDK/platform-tools:$PATH"
+          } >> "$GITHUB_ENV"
+          echo "sdk.dir=$SDK" > local.properties
+
+      - name: Install build-tools for the re-verification
+        run: |
+          yes | sdkmanager --licenses > /dev/null || true
+          tools/ci-run.sh --name sdk-packages-verify sdkmanager --install "build-tools;${ANDROID_BUILD_TOOLS}" "platform-tools"
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: lumen2d-studio-apk
+          path: build/apk
+      - uses: actions/download-artifact@v8
+        with:
+          name: lumen2d-device-screenshots
+          path: build/device
+        continue-on-error: true
+
+      - name: Re-verify the downloaded APKs (independent of the build job)
+        run: |
+          set -e
+          mkdir -p build
+          DEBUG_APK="$(find build/apk -name '*-debug.apk' | head -1)"
+          RELEASE_APK="$(find build/apk -name '*-release.apk' | head -1)"
+          test -n "$DEBUG_APK" -a -n "$RELEASE_APK" || { echo "::error title=Publish::the uploaded artifact does not contain both APKs"; exit 1; }
+          tools/verify-apk.sh "$DEBUG_APK" --expect debug --report build/recheck-debug.md
+          tools/verify-apk.sh "$RELEASE_APK" --expect release --report build/recheck-release.md
+          sha256sum "$DEBUG_APK" "$RELEASE_APK" | tee build/apk-sha256.txt
+
+      - name: Publish the rolling release
+        if: github.ref_type == 'tag' || startsWith(github.ref, 'refs/heads/') && (github.ref_name == 'main' || startsWith(github.ref_name, 'arena/'))
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.publish_release }}" = "false" ]; then
+            echo "release publishing disabled for this manual run"; exit 0
+          fi
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            TAG="${GITHUB_REF_NAME}"; PRERELEASE=""; TITLE="Lumen2D Studio ${GITHUB_REF_NAME}"
+          else
+            TAG="latest-build"; PRERELEASE="--prerelease"; TITLE="Lumen2D Studio — latest build"
+          fi
+          {
+            echo "### Lumen2D Studio — Android 2D game engine & editor"
+            echo
+            echo "Built from commit \`${GITHUB_SHA}\` by [Lumen2D Engine CI](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID})."
+            echo
+            echo "Install \`app-android-debug.apk\` (debug-signed, also used for the on-device smoke test)"
+            echo "or \`app-android-release.apk\` (R8-minified) on Android 7.0+ (API 24). Both APKs are"
+            echo "verified before publishing: the checks below run against the uploaded artifacts, and"
+            echo "the debug APK is installed and played on an emulator."
+            echo
+            echo "### Checksums"
+            echo
+            echo '```'
+            cat build/apk-sha256.txt
+            echo '```'
+            echo
+            echo "<details><summary>Static verification — debug APK</summary>"
+            echo
+            cat build/recheck-debug.md
+            echo
+            echo "</details>"
+            echo
+            echo "<details><summary>Static verification — release APK</summary>"
+            echo
+            cat build/recheck-release.md
+            echo
+            echo "</details>"
+            if [ -f build/device/emulator-report.md ]; then
+              echo "<details><summary>On-device verification — emulator</summary>"
+              echo
+              cat build/device/emulator-report.md
+              echo
+              echo "</details>"
+            fi
+          } > build/release-notes.md
+
+          gh release view "$TAG" > /dev/null 2>&1 || \
+            gh release create "$TAG" --title "$TITLE" $PRERELEASE --notes-file build/release-notes.md
+          gh release edit "$TAG" --title "$TITLE" --notes-file build/release-notes.md
+          gh release upload "$TAG" $(find build/apk -name '*.apk' | tr '\n' ' ') --clobber
+          gh release view "$TAG" --json assets --jq '.assets[] | "\(.name)  \(.size) bytes"'

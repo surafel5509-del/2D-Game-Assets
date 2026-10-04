@@ -16,16 +16,20 @@ android {
         versionName = "1.0.0"
     }
 
+    // Release APKs are signed with the debug keystore unless a real one is supplied through CI
+    // secrets, so every CI build is installable on a device. When no keystore exists at all we
+    // fall back to AGP's own `debug` signing config, which keeps a clean checkout buildable.
+    val keystorePath = providers.environmentVariable("LUMEN_KEYSTORE").orNull
+        ?: "${System.getProperty("user.home")}/.android/debug.keystore"
+    val keystoreExists = file(keystorePath).isFile
+
     signingConfigs {
-        // Release APKs are signed with the debug keystore unless a real one is supplied
-        // through CI secrets / local.properties, so every CI build is installable on-device.
-        create("ciRelease") {
-            val storePath = System.getenv("LUMEN_KEYSTORE") ?: "${System.getProperty("user.home")}/.android/debug.keystore"
-            if (file(storePath).exists()) {
-                storeFile = file(storePath)
-                storePassword = System.getenv("LUMEN_KEYSTORE_PASSWORD") ?: "android"
-                keyAlias = System.getenv("LUMEN_KEY_ALIAS") ?: "androiddebugkey"
-                keyPassword = System.getenv("LUMEN_KEY_PASSWORD") ?: "android"
+        if (keystoreExists) {
+            create("ciRelease") {
+                storeFile = file(keystorePath)
+                storePassword = providers.environmentVariable("LUMEN_KEYSTORE_PASSWORD").orNull ?: "android"
+                keyAlias = providers.environmentVariable("LUMEN_KEY_ALIAS").orNull ?: "androiddebugkey"
+                keyPassword = providers.environmentVariable("LUMEN_KEY_PASSWORD").orNull ?: "android"
             }
         }
     }
@@ -39,7 +43,8 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            signingConfig = signingConfigs.getByName("ciRelease")
+            signingConfig =
+                if (keystoreExists) signingConfigs.getByName("ciRelease") else signingConfigs.getByName("debug")
         }
     }
 

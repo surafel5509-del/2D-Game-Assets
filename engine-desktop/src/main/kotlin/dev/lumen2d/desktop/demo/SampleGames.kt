@@ -48,6 +48,15 @@ import java.io.File
 
 /** Builds every sample game into [root]; each entry in [written] is a project folder name. */
 class SampleGames(private val root: File) {
+    companion object {
+        /**
+         * Fixed write timestamp for the shipped projects: regenerating `sample-games/` twice
+         * produces identical bytes, so CI can assert the committed content matches the engine
+         * with a plain `git diff` (the property that keeps the APK's samples honest).
+         */
+        const val SAMPLE_SAVED_AT: Long = 1_600_000_000_000L
+    }
+
 
     val written = ArrayList<String>()
 
@@ -91,7 +100,7 @@ class SampleGames(private val root: File) {
             project.vfs.delete(templateScene)
         }
         project.saveInputMap(DefaultInputMap.bindings())
-        project.save()
+        project.save(SAMPLE_SAVED_AT)
         written += id
     }
 
