@@ -547,10 +547,20 @@ def finish(report: Report, args, code: int | None, digest: str | None, info: dic
             print(f"::error title=APK check {check['id']}::{check['detail']}")
         print(f"::error title=APK verification::FAILED — {len(failures)} of {len(report.checks) - skipped} checks failed")
     else:
-        signed = "signed, " if not report.skips or "skip.apksigner" not in report.skips else ""
+        # The notice carries the identity of the verified artifact (package, SDK levels, signature,
+        # size, digest). Notices are readable through the GitHub API even where the job log and the
+        # artifact itself cannot be downloaded, so "it was verified" stays checkable.
+        facts = dict(report.sections[0][1]) if report.sections else {}
+        summary = " · ".join(
+            f"{key} {facts[key]}" for key in ("Package", "Version", "SDK", "Signature", "Size", "SHA-256") if key in facts
+        )
+        content = ", ".join(
+            f"{facts[key]}" for key in ("Asset packs", "Provenance", "Sample games") if key in facts
+        )
         print(
-            f"::notice title=APK verified::{os.path.basename(args.apk)} is {signed}well-formed and ships "
-            f"the asset library with provenance and the sample games ({len(report.checks) - skipped} checks)"
+            f"::notice title=APK verified::{os.path.basename(args.apk)} — "
+            f"{len(report.checks) - skipped} checks passed · {summary}"
+            + (f" · {content}" if content else "")
         )
 
 

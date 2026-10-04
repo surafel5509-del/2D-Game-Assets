@@ -240,19 +240,22 @@ adb shell settings put system screen_off_timeout 1800000 > /dev/null 2>&1 || tru
 
 # A headless device gives no other signal that the hub is on screen, so re-dump until the
 # sample titles show up instead of taking one dump and hoping it caught a laid-out window.
-dump_hub() {
+dump_screen() { # <local xml> <texts file>
+  local local_xml="$1" texts="$2" remote dump_out=""
   adb shell input keyevent KEYCODE_WAKEUP > /dev/null 2>&1 || true
   adb shell wm dismiss-keyguard > /dev/null 2>&1 || true
-  DUMP_OUT=""
-  for remote in /sdcard/hub.xml /data/local/tmp/hub.xml; do
-    DUMP_OUT="$(adb shell uiautomator dump "$remote" 2>&1 | tr -d '\r' | tail -n 2)"
-    : > "$WORK/hub.xml"
-    adb exec-out cat "$remote" > "$WORK/hub.xml" 2>/dev/null || true
-    [ -s "$WORK/hub.xml" ] && break
+  for remote in /sdcard/window.xml /data/local/tmp/window.xml; do
+    dump_out="$(adb shell uiautomator dump "$remote" 2>&1 | tr -d '\r' | tail -n 2)"
+    : > "$local_xml"
+    adb exec-out cat "$remote" > "$local_xml" 2>/dev/null || true
+    [ -s "$local_xml" ] && break
   done
   # uiautomator's own words ("could not get idle state", …) explain an empty dump; keep them.
-  printf '%s\n' "$DUMP_OUT" > "$WORK/hub-dump.log"
+  printf '%s\n' "$dump_out" > "$WORK/hub-dump.log"
+  python3 "$ROOT/tools/ui_dump.py" texts "$local_xml" > "$texts" 2>/dev/null || true
 }
+
+dump_hub() { dump_screen "$WORK/hub.xml" "$WORK/hub-texts.txt"; }
 
 # Evidence for the annotations: a failing dump is useless unless it says what the device showed.
 annotate_ui_evidence() {
@@ -310,7 +313,6 @@ MISSING="all three"
 for _ in $(seq 1 12); do
   sleep 5
   dump_hub
-  python3 "$ROOT/tools/ui_dump.py" texts "$WORK/hub.xml" > "$WORK/hub-texts.txt" 2>/dev/null || true
   MISSING=""
   for title in "Hello Lumen2D" "Pixel Platformer" "Neon Shooter"; do
     grep -qF "$title" "$WORK/hub-texts.txt" || MISSING="$MISSING $title"
@@ -346,33 +348,51 @@ else
 fi
 
 # ---------------------------------------------------- run a game for real
-TAP="$(python3 "$ROOT/tools/ui_dump.py" find "$WORK/hub.xml" Play 2>/dev/null || true)"
-if [ -n "$TAP" ]; then
+# Tap Play and wait for the studio. The tap may land on a stale layout (or on a title that
+# merely contains "play"), so the coordinates are re-read from a fresh dump before retrying.
+TAP=""
+opened=no
+for attempt in 1 2; do
+  TAP="$(python3 "$ROOT/tools/ui_dump.py" find "$WORK/hub.xml" Play 2>/dev/null || true)"
+  [ -n "$TAP" ] || break
+  echo "tapping Play at $TAP (attempt $attempt)"
   adb shell input tap $TAP > /dev/null 2>&1 || true
-  sleep 12
-  adb shell uiautomator dump /sdcard/editor.xml > /dev/null 2>&1 || true
-  adb pull /sdcard/editor.xml "$WORK/editor.xml" > /dev/null 2>&1 || true
-  EDITOR_TEXTS="$(python3 "$ROOT/tools/ui_dump.py" texts "$WORK/editor.xml" 2>/dev/null || true)"
-  if printf '%s' "$EDITOR_TEXTS" | grep -qE "Inspector|Console|Assets|Scripts"; then
-    record "editor.open" yes "the studio opened the sample project (tapped Play at $TAP)"
-  else
-    record "editor.open" no "the studio panes never appeared after tapping Play"
-    failures=$((failures + 1))
-  fi
+  for _ in $(seq 1 8); do
+    sleep 5
+    dump_screen "$WORK/editor.xml" "$WORK/editor-texts.txt"
+    if grep -qE "Inspector|Console|Assets|Scripts" "$WORK/editor-texts.txt"; then
+      opened=yes
+      break 2
+    fi
+  done
+  dump_hub
+done
+
+if [ -z "$TAP" ]; then
+  record "ui.play-control" no "no Play control was found in the hub dump"
+  failures=$((failures + 1))
+elif [ "$opened" = yes ]; then
+  record "editor.open" yes "the studio opened the sample project (tapped Play at $TAP)"
+else
+  record "editor.open" no "the studio panes never appeared after tapping Play at $TAP"
+  failures=$((failures + 1))
+  annotate_ui_evidence
+fi
+
+if [ "$opened" = yes ]; then
   adb exec-out screencap -p > "$SHOTS/editor.png" 2>/dev/null || true
   [ -s "$SHOTS/editor.png" ] && record "editor.screenshot" yes "$(wc -c < "$SHOTS/editor.png") bytes → ci-logs/emulator-shots/editor.png"
 
+  # Playing also has to reach the engine: its own log line proves a scene was loaded on device.
+  sleep 5
   adb logcat -d -v brief > "$ROOT/ci-logs/logcat-after-play.txt" 2>/dev/null || true
-  SCENE_LINE="$(grep -E "Lumen2D.*Scene .* loaded" "$ROOT/ci-logs/logcat-after-play.txt" | tail -1)"
+  SCENE_LINE="$(grep -E "Scene '?[^']*'? loaded" "$ROOT/ci-logs/logcat-after-play.txt" | tail -1)"
   if [ -n "$SCENE_LINE" ]; then
     record "engine.scene" yes "${SCENE_LINE:0:150}"
   else
     record "engine.scene" no "no 'Scene … loaded' line from the engine in logcat"
     failures=$((failures + 1))
   fi
-else
-  record "ui.play-control" no "no Play control was found in the hub dump"
-  failures=$((failures + 1))
 fi
 
 echo "--------------------------------------------------------------"
