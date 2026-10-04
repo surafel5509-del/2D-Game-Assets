@@ -454,7 +454,8 @@ else
   adb shell input tap $TAP_NEW > /dev/null 2>&1 || true
   sleep 4
   dump_screen "$WORK/dialog.xml" "$WORK/dialog-texts.txt"
-  if grep -qF "Create" "$WORK/dialog-texts.txt"; then
+  # AlertDialog buttons come back upper-cased ("CREATE") on device.
+  if grep -qiF "create" "$WORK/dialog-texts.txt"; then
     record "new-project.dialog" yes "the New project dialog opened"
     FIELD="$(python3 "$ROOT/tools/ui_dump.py" findclass "$WORK/dialog.xml" "EditText" 2>/dev/null || true)"
     [ -n "$FIELD" ] && adb shell input tap $FIELD > /dev/null 2>&1
