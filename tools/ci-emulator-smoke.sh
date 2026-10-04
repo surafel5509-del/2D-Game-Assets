@@ -76,8 +76,18 @@ finish() {
   if [ "${GITHUB_ACTIONS:-}" = "true" ] && [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
     cat "$WORK/report.md" >> "$GITHUB_STEP_SUMMARY"
   fi
-  if [ "$code" -ne 0 ] && [ "${GITHUB_ACTIONS:-}" = "true" ]; then
-    echo "::error title=APK on-device smoke test::${failures} check(s) failed — see the step summary for the device report"
+  if [ "${GITHUB_ACTIONS:-}" = "true" ]; then
+    # Every failed check becomes its own annotation: annotations are readable from the API, so a
+    # red run can be understood without downloading the job log.
+    while IFS=$'\t' read -r id ok detail; do
+      [ "$ok" = no ] || continue
+      printf '::error title=on-device check %s::%s\n' "$id" "${detail:0:600}"
+    done < "$RESULTS"
+    if [ "$code" -eq 0 ]; then
+      printf '::notice title=on-device smoke test::installed, launched and played a sample game on the emulator\n'
+    else
+      printf '::error title=APK on-device smoke test::%s check(s) failed — device report uploaded as lumen2d-device-screenshots\n' "$failures"
+    fi
   fi
   exit "$code"
 }
