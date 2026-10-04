@@ -49,9 +49,13 @@ java ... dev.lumen2d.desktop.LumenDesktopKt --new "My Game" --dir ~/games       
 gradle :app-android:assembleDebug            # with an Android SDK + JDK 17
 ```
 
-CI builds and publishes a ready-to-install APK on every push to `main`/`arena/*` and on tags —
-see **Releases** in this repository (`lumen2d-studio.apk`). The APK ships the engine, the asset
-library, the provenance index and all three sample games, so a fresh install is playable offline.
+CI builds, verifies and publishes installable APKs on every push to `main`/`arena/*` and on tags —
+see the rolling **latest-build** release, which carries `app-android-debug.apk` (debug-signed) and
+`app-android-release.apk` (R8-minified, ~570 kB), their SHA-256 checksums, the full verification
+report of each APK (package, SDK levels, signature, asset contents) and screenshots from the
+emulator run that installs the debug APK and plays a sample game. The APK ships the engine, the
+asset library, the provenance index and all three sample games, so a fresh install is playable
+offline.
 
 ## What's in the box
 
@@ -65,7 +69,7 @@ library, the provenance index and all three sample games, so a fresh install is 
 | `assets-library/sources/` | Per-file provenance index + the vendored third-party archive it was imported from |
 | `sample-games/` | `hello-lumen2d`, `pixel-platformer`, `neon-shooter` — complete, playable projects |
 | `docs/` | [Engine](docs/ENGINE.md), [scripting](docs/SCRIPTING.md), [assets](docs/ASSETS.md), [editor](docs/EDITOR.md), [Android](docs/ANDROID.md), [building](docs/BUILDING.md), [samples](docs/SAMPLES.md) |
-| `tools/` | Offline toolchain bootstrap, build/test runner, Android type checker, generators |
+| `tools/` | Offline toolchain bootstrap, build/test runner, Android type checker, APK verifier (+ self-test), emulator smoke test, generators |
 | `docs/preview/generated/` | Screenshots rendered by the engine itself (7 demos) |
 
 ## Design rules

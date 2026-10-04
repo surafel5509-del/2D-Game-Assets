@@ -169,8 +169,8 @@ verifier cannot rot silently; it needs no SDK and runs in CI on every push.
   and fails the build if `git diff` is not empty. After changing the engine, run
   `--export-assets` / `--export-samples` (or `gradle :engine-desktop:exportContent`) and commit the
   result.
-* **Build output never is.** `out/`, `build/`, `.gradle/` and `docs/preview/generated/frames/` are
-  ignored.
+* **Build output never is.** `out/`, `build/`, `.gradle/`, `ci-logs/` (what `tools/ci-run.sh`
+  captures locally) and `docs/preview/generated/frames/` are ignored.
 * **Provenance is part of a pack.** If you add an asset, add its sidecar and (for generated content)
   the recipe that makes it; the library tests enforce it.
 * **The Android modules stay framework-only.** No new AndroidX dependency in `engine-android`, no

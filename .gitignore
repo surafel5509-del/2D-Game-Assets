@@ -19,6 +19,9 @@ local.properties
 .cxx/
 app-android/release/
 
+# --- CI helper output (tools/ci-run.sh) -----------------------------------
+ci-logs/
+
 # --- editor / OS noise ----------------------------------------------------
 .idea/
 *.iml
