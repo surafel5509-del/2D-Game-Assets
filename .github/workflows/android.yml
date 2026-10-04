@@ -1,7 +1,8 @@
 name: Android editor APK
 on:
   push:
-    branches: ["arena/01a0e402-2d-game-assets"]
+    branches: ["arena/01a0e402-2d-game-assets", "arena/01a10644-2d-game-assets"]
+  pull_request:
   workflow_dispatch:
 permissions:
   contents: write
@@ -69,116 +70,33 @@ jobs:
           else
             echo '::notice::Android instrumentation test APK compiled'
           fi
-      - name: Device-test prerequisites
-        if: always()
-        run: |
-          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
-          images=$(find "$SDK/system-images" -name system.img -print -quit 2>/dev/null || true)
-          emulator=$(find "$SDK/emulator" -name emulator -type f -print -quit 2>/dev/null || true)
-          echo "::notice::Emulator: ${emulator:-unavailable}; system image: ${images:-unavailable}; KVM: $(test -e /dev/kvm && echo yes || echo no)"
-      - name: Emulator dashboard smoke test (best effort)
-        continue-on-error: true
-        timeout-minutes: 8
+      - name: Device smoke test on an Android emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        timeout-minutes: 50
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
-          MANAGER="$SDK/cmdline-tools/latest/bin/sdkmanager"
-          if [ ! -x "$MANAGER" ]; then echo '::warning::No SDK manager; device smoke test unavailable'; exit 0; fi
-          if ! (yes || true) | timeout 270 "$MANAGER" --install 'emulator' 'system-images;android-35;default;x86_64' > /tmp/emulator-install.log 2>&1; then
-            echo '::warning::Cannot install emulator/system image on runner; APK compile still passed'
-            tail -4 /tmp/emulator-install.log | while IFS= read -r line; do echo "::notice::$line"; done
-            exit 0
-          fi
-          echo '::notice::Emulator and Android 35 image installed; creating virtual device'
-          export ANDROID_AVD_HOME="$RUNNER_TEMP/world-avds"
-          mkdir -p "$ANDROID_AVD_HOME"
-          printf 'no\n' | "$SDK/cmdline-tools/latest/bin/avdmanager" create avd -n world-smoke -k 'system-images;android-35;default;x86_64' --force > /tmp/avd.log 2>&1
-          if [ ! -f "$ANDROID_AVD_HOME/world-smoke.ini" ]; then
-            echo "::warning::AVD config missing from $ANDROID_AVD_HOME; emulator not launched"
-            cat /tmp/avd.log | tail -18 | while IFS= read -r line; do echo "::notice::$line"; done
-            find "$HOME/.android" "$ANDROID_AVD_HOME" -maxdepth 3 -name '*.ini' 2>/dev/null | while IFS= read -r line; do echo "::notice::Found AVD config: $line"; done
-            exit 0
-          fi
-          if [ -e /dev/kvm ]; then
-            ls -l /dev/kvm | while IFS= read -r line; do echo "::notice::$line"; done
-            sudo chmod 666 /dev/kvm
-          fi
-          "$SDK/emulator/emulator" -accel-check | while IFS= read -r line; do echo "::notice::$line"; done
-          "$SDK/emulator/emulator" -avd world-smoke -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -memory 2048 > /tmp/emulator.log 2>&1 &
-          EMULATOR_PID=$!
-          trap 'kill "$EMULATOR_PID" 2>/dev/null || true' EXIT
-          ADB="$SDK/platform-tools/adb"
-          if ! timeout 85 "$ADB" wait-for-device; then
-            echo '::warning::Emulator did not appear in adb; desktop device test was unavailable'
-            tail -20 /tmp/emulator.log | while IFS= read -r line; do echo "::notice::$line"; done
-            exit 0
-          fi
-          echo '::notice::Android device connected; waiting for boot completion'
-          ready=0
-          for i in $(seq 1 75); do
-            if [ "$("$ADB" shell getprop sys.boot_completed | tr -d '\r')" = 1 ]; then ready=1; break; fi
-            sleep 2
-          done
-          if [ "$ready" -ne 1 ]; then echo '::error::Emulator did not finish booting'; tail -15 /tmp/emulator.log; exit 1; fi
-          "$ADB" install -r app/build/outputs/apk/debug/app-debug.apk
-          "$ADB" shell am start -W -n com.world2d.engine/.editor.MainActivity
-          sleep 12
-          "$ADB" shell uiautomator dump /sdcard/world-smoke.xml > /tmp/ui.log 2>&1 || true
-          "$ADB" shell cat /sdcard/world-smoke.xml > /tmp/world-smoke.xml 2>/dev/null || true
-          if grep -q 'LEARN BY PLAYING\|New project' /tmp/world-smoke.xml; then
-            echo '::notice::Native dashboard rendered and example project cards were visible on emulator'
-          else
-            echo '::error::Dashboard UI was not visible after launch'
-            tail -20 /tmp/ui.log
-            exit 1
-          fi
-          "$ADB" exec-out screencap -p > /tmp/world-smoke.png
-          printf '{"content":"' > /tmp/world-smoke-blob.json
-          base64 -w0 /tmp/world-smoke.png >> /tmp/world-smoke-blob.json
-          printf '","encoding":"base64"}' >> /tmp/world-smoke-blob.json
-          IMAGE_SHA=$(gh api -X POST "repos/${{ github.repository }}/git/blobs" --input /tmp/world-smoke-blob.json --jq .sha)
-          echo "::notice::EMULATOR_SCREENSHOT_GIT_BLOB_SHA=$IMAGE_SHA"
-          "$ADB" logcat -d -t 800 -s AndroidRuntime:E > /tmp/crash.log
-          if grep -q 'FATAL EXCEPTION' /tmp/crash.log && grep -q 'com.world2d.engine' /tmp/crash.log; then
-            tail -25 /tmp/crash.log; echo '::error::App crashed on emulator'; exit 1
-          fi
-          if ! python3 scripts/android_smoke.py "$ADB" /tmp/world-game-smoke.png > /tmp/android-smoke.log 2>&1; then
-            echo '::warning::Interactive example test failed; native dashboard test still passed'
-            tail -18 /tmp/android-smoke.log | while IFS= read -r line; do echo "::notice::Interactive: $line"; done
-          else
-            cat /tmp/android-smoke.log
-            printf '{"content":"' > /tmp/world-game-smoke-blob.json
-            base64 -w0 /tmp/world-game-smoke.png >> /tmp/world-game-smoke-blob.json
-            printf '","encoding":"base64"}' >> /tmp/world-game-smoke-blob.json
-            GAME_IMAGE_SHA=$(gh api -X POST "repos/${{ github.repository }}/git/blobs" --input /tmp/world-game-smoke-blob.json --jq .sha)
-            echo "::notice::GAMEPLAY_SCREENSHOT_GIT_BLOB_SHA=$GAME_IMAGE_SHA"
-          fi
-          TEST_APK=app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
-          if [ -f "$TEST_APK" ]; then
-            "$ADB" install -r "$TEST_APK"
-            "$ADB" shell am instrument -w com.world2d.engine.test/androidx.test.runner.AndroidJUnitRunner > /tmp/instrumentation.log 2>&1 || true
-            if ! grep -q 'OK (1 test)' /tmp/instrumentation.log; then
-              echo '::error::Actual Android game project ZIP export test failed'
-              tail -25 /tmp/instrumentation.log | while IFS= read -r line; do echo "::notice::Instrument: $line"; done
-              exit 1
-            fi
-            echo '::notice::Exporter instrumentation verified native sources, authored scenes and imported assets in game ZIP'
-            "$ADB" exec-out run-as com.world2d.engine cat files/game-export-smoke.zip > "$RUNNER_TEMP/world-game-export.zip"
-            mkdir -p "$RUNNER_TEMP/world-export"
-            unzip -q "$RUNNER_TEMP/world-game-export.zip" -d "$RUNNER_TEMP/world-export"
-            if ! bash "$RUNNER_TEMP/world-export/gradlew" -p "$RUNNER_TEMP/world-export" --no-daemon :app:assembleDebug > /tmp/export-build.log 2>&1; then
-              echo '::error::Actual game export failed to assemble as an APK'
-              grep -E 'error:|FAILURE:|What went wrong|Could not |failed' /tmp/export-build.log | tail -22 | while IFS= read -r line; do echo "::notice::Export: $line"; done
-              exit 1
-            fi
-            echo '::notice::Actual exported game compiled to a separate installable Android APK'
-          else
-            echo '::warning::Instrumentation APK unavailable; exported-game build was not device-tested'
-          fi
+        with:
+          api-level: 30
+          target: default
+          arch: x86_64
+          profile: pixel_2
+          emulator-boot-timeout: 900
+          emulator-options: -no-snapshot -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -camera-back none -camera-front none
+          disable-animations: true
+          script: bash scripts/android_device_test.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: 2D-WORLD-device-test-evidence
+          path: |
+            ${{ runner.temp }}/world-device-test/*.png
+            ${{ runner.temp }}/world-device-test/smoke.log
+            ${{ runner.temp }}/world-device-test/crash-trimmed.log
+            ${{ runner.temp }}/world-device-test/ui-dump.xml
+          if-no-files-found: ignore
       - uses: actions/upload-artifact@v4
         if: success()
         with:
           name: 2D-WORLD-sample-game-debug-APK
-          path: ${{ runner.temp }}/world-export/app/build/outputs/apk/debug/app-debug.apk
+          path: ${{ runner.temp }}/world-device-test/export/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: ignore
