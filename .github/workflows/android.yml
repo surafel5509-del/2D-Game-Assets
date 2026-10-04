@@ -188,7 +188,9 @@ jobs:
   android-emulator:
     name: Install and run the APK on an emulator
     needs: android-apk
-    if: github.event_name != 'pull_request' && inputs.emulator_smoke != false
+    # `inputs.x != false` would skip the job on push events (null coerces to false), so the
+    # manual input is only consulted for workflow_dispatch runs.
+    if: github.event_name != 'pull_request' && (github.event_name != 'workflow_dispatch' || inputs.emulator_smoke)
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
