@@ -43,16 +43,14 @@ if [ "${GITHUB_ACTIONS:-}" = "true" ] && [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
 fi
 
 if [ "$STATUS" -ne 0 ] && [ "${GITHUB_ACTIONS:-}" = "true" ]; then
-  HITS="$(grep -nE '(^e: |^w: |^\[FAIL\]|FAILURE:|> Task .*FAILED|What went wrong|Caused by: |error:|AndroidRuntime|AssertionError|ScriptError)' "$LOG" | head -12 || true)"
-  if [ -n "$HITS" ]; then
-    while IFS= read -r line; do
-      [ -n "$line" ] || continue
-      printf '::error title=%s::%s\n' "${LABEL}" "$(printf '%s' "${line:0:400}" | escape)"
-    done <<< "$HITS"
+  # GitHub keeps only the first few annotations of a step, so the whole diagnosis goes into
+  # exactly two: the most relevant error lines, and the tail of the log.
+  HITS="$(grep -nE '(^e: |FAILURE:|> Task .*FAILED|What went wrong|Caused by: |error:|AndroidRuntime|AssertionError|ScriptError|FAIL\])' "$LOG" | head -8 || true)"
+  if [ -z "$HITS" ]; then
+    HITS="$(tail -n 6 "$LOG" || true)"
   fi
-  TAIL="$(tail -n 25 "$LOG" | escape)"
-  printf '::error title=%s (last log lines)::%s\n' "${LABEL}" "${TAIL:0:1200}"
-  printf '::error title=%s failed::exit code %s — full log uploaded as artifact ci-logs/%s.log\n' "${LABEL}" "${STATUS}" "${LABEL}"
+  printf '::error title=%s::%s\n' "${LABEL}" "$(printf '%s' "$HITS" | escape | cut -c1-1500)"
+  printf '::error title=%s (log tail)::%s\n' "${LABEL}" "$(tail -n 20 "$LOG" | escape | cut -c1-1500)"
 fi
 
 echo "--- ${LABEL}: exit code ${STATUS} (log: ci-logs/${LABEL}.log)"
