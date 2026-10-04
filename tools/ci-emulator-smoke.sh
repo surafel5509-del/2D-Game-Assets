@@ -134,11 +134,14 @@ for tool in adb emulator avdmanager; do
 done
 
 echo "creating AVD $AVD_NAME"
-echo no | avdmanager create avd -n "$AVD_NAME" -k "$IMAGE" --device pixel_5 --force > "$WORK/avd.log" 2>&1 || {
-  echo "::error title=emulator smoke::avdmanager could not create $AVD_NAME"
-  tail -20 "$WORK/avd.log"
-  exit 2
-}
+if ! echo no | avdmanager create avd -n "$AVD_NAME" -k "$IMAGE" --device pixel_5 --force > "$WORK/avd.log" 2>&1; then
+  echo "notice: the pixel_5 profile is unavailable, falling back to the default device"
+  echo no | avdmanager create avd -n "$AVD_NAME" -k "$IMAGE" --force > "$WORK/avd.log" 2>&1 || {
+    echo "::error title=emulator smoke::avdmanager could not create $AVD_NAME"
+    tail -20 "$WORK/avd.log"
+    exit 2
+  }
+fi
 
 echo "booting the emulator (headless)…"
 "$SDK/emulator/emulator" \
@@ -165,6 +168,11 @@ fi
 MODEL="$(adb shell getprop ro.product.model | tr -d '\r')"
 VERSION="$(adb shell getprop ro.build.version.release | tr -d '\r') (API $(adb shell getprop ro.build.version.sdk | tr -d '\r'))"
 record "emulator.boot" yes "booted $MODEL · Android $VERSION"
+
+# Wake the device and get past any keyguard: a headless AVD can boot to a locked screen, where
+# uiautomator would see nothing.
+adb shell input keyevent KEYCODE_WAKEUP > /dev/null 2>&1 || true
+adb shell wm dismiss-keyguard > /dev/null 2>&1 || true
 
 # Animation must not fight the tap coordinates below.
 for key in window_animation_scale transition_animation_scale animator_duration_scale; do
