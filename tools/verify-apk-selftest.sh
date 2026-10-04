@@ -89,7 +89,43 @@ for check in pack.base.sidecars sample.neon-shooter assets.uncompressed content.
   fi
 done
 
-echo "3. a missing file is reported, not silently ignored"
+echo "3. real SDK tool output is parsed (both aapt2 spellings, apksigner)"
+BADGING="$WORK/badging.txt"
+SIGNER="$WORK/signer.txt"
+cat > "$BADGING" <<'EOF'
+package: name='dev.lumen2d.studio.debug' versionCode='1' versionName='1.0.0' compileSdkVersion='36'
+minSdkVersion:'24'
+targetSdkVersion:'36'
+uses-permission: name='android.permission.VIBRATE'
+uses-feature-not-required: name='android.hardware.touchscreen'
+application-label:'Lumen2D Studio'
+launchable-activity: name='dev.lumen2d.studio.MainActivity'  label='' icon=''
+EOF
+cat > "$SIGNER" <<'EOF'
+Verifies
+Verified using v1 scheme (JAR signing): false
+Verified using v2 scheme (APK Signature Scheme v2): true
+Verified using v3 scheme (APK Signature Scheme v3): false
+Number of signers: 1
+Signer #1 certificate DN: CN=Android Debug, O=Android, C=US
+EOF
+for spelling in minSdkVersion sdkVersion; do
+  sed "s/^minSdkVersion:/$spelling:/" "$BADGING" > "$WORK/badging-$spelling.txt"
+  if python3 "$ROOT/tools/verify-apk.py" --apk "$WORK/healthy-debug.apk" --expect debug \
+      --content-root "$ROOT" --badging "$WORK/badging-$spelling.txt" --signer "$SIGNER" \
+      --json "$WORK/parsed.json" > "$WORK/parsed.txt" 2>&1; then
+    step "parses aapt2 '$spelling' + apksigner output" "ok"
+  else
+    step "parses aapt2 '$spelling' + apksigner output" "FAILED"
+    grep -E "FAIL\]" "$WORK/parsed.txt" | head -5
+    fail=1
+  fi
+done
+grep -q "minSdk=24" "$WORK/parsed.txt" && grep -q "DN=CN=Android Debug" "$WORK/parsed.txt" \
+  && step "reports the parsed minSdk and certificate" "ok" \
+  || { step "reports the parsed minSdk and certificate" "FAILED"; fail=1; }
+
+echo "4. a missing file is reported, not silently ignored"
 if "$ROOT/tools/verify-apk.sh" "$WORK/does-not-exist.apk" --no-tools > "$WORK/missing.txt" 2>&1; then
   step "missing APK rejected" "FAILED — expected non-zero exit"
   fail=1

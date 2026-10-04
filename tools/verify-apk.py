@@ -90,7 +90,8 @@ def parse_badging(text: str) -> dict:
         if line.startswith("package:"):
             for key, value in re.findall(r"(\w+)='([^']*)'", line):
                 info[key] = value
-        elif line.startswith("sdkVersion:"):
+        # aapt2 has used both spellings for the minimum SDK over the years.
+        elif line.startswith("sdkVersion:") or line.startswith("minSdkVersion:"):
             info["minSdk"] = line.split(":", 1)[1].strip().strip("'")
         elif line.startswith("targetSdkVersion:"):
             info["targetSdk"] = line.split(":", 1)[1].strip().strip("'")
@@ -118,7 +119,9 @@ def parse_signer(text: str) -> dict:
         scheme = re.match(r"Verified using (v\d) scheme[^:]*:\s*(true|false)", line)
         if scheme:
             info["schemes"][scheme.group(1)] = scheme.group(2) == "true"
-        cert = re.match(r"Signer #\d+ certificate DN:\s*(.+)", line)
+        # apksigner prints "Signer #1 certificate DN: …"; other builds call it the subject.
+        cert = re.match(r"Signer #\d+ certificate (?:DN|subject):\s*(.+)", line) or \
+            re.match(r"(?:Subject|DN):\s*(.+)", line)
         if cert:
             info["certs"].append(cert.group(1).strip())
         if line.startswith("Number of signers:"):
@@ -414,8 +417,13 @@ def main() -> int:
             expected_packages = ["dev.lumen2d.studio.debug", "dev.lumen2d.studio"] if args.expect == "any" else (
                 ["dev.lumen2d.studio.debug"] if args.expect == "debug" else ["dev.lumen2d.studio"]
             )
-            report.check("manifest.package", package in expected_packages, f"package={package}")
-            report.check("manifest.minSdk", info.get("minSdk") == "24", f"sdkVersion={info.get('minSdk')} (minSdk 24)")
+            evidence = " | ".join(badging_text.splitlines()[:6])[:420]
+            report.check("manifest.package", package in expected_packages, f"package={package} | {evidence}")
+            report.check(
+                "manifest.minSdk",
+                info.get("minSdk") == "24",
+                f"minSdk={info.get('minSdk')} (expected 24)" if info.get("minSdk") else f"no sdkVersion/minSdkVersion line in badging | {evidence}",
+            )
             report.check("manifest.targetSdk", info.get("targetSdk") == "36", f"targetSdkVersion={info.get('targetSdk')}")
             report.check("manifest.versionName", info.get("versionName") == "1.0.0", f"versionName={info.get('versionName')}")
             report.check(
@@ -453,7 +461,11 @@ def main() -> int:
                 bool(strong),
                 f"schemes={signer['schemes']} signers={signer.get('signers', '?')}",
             )
-            report.check("apk.certificate", bool(signer["certs"]), f"DN={signer['certs'][0] if signer['certs'] else 'none'}")
+            report.check(
+                "apk.certificate",
+                bool(signer["certs"]),
+                f"DN={signer['certs'][0]}" if signer["certs"] else f"no certificate DN in apksigner output | {' | '.join(signer_text.splitlines()[:6])[:420]}",
+            )
         else:
             report.check("skip.apksigner", True, "apksigner not available — signature checks skipped")
             signer = {}
