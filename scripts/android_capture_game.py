@@ -15,19 +15,35 @@ def run(*args, check=True):
 
 
 def button_center():
+    saw_system_anr = False
     try:
-        run('shell', 'uiautomator', 'dump', '/sdcard/hill-climb-ui.xml')
-        root = ET.fromstring(run('shell', 'cat', '/sdcard/hill-climb-ui.xml'))
-        for node in root.iter('node'):
-            description = node.attrib.get('content-desc', '').lower()
-            if 'gas pedal' not in description:
-                continue
-            match = re.fullmatch(r'\[(\d+),(\d+)\]\[(\d+),(\d+)\]', node.attrib.get('bounds', ''))
-            if match:
+        for _ in range(3):
+            run('shell', 'uiautomator', 'dump', '/sdcard/hill-climb-ui.xml')
+            root = ET.fromstring(run('shell', 'cat', '/sdcard/hill-climb-ui.xml'))
+            nodes = list(root.iter('node'))
+            if any("Process system isn't responding" in n.attrib.get('text', '') for n in nodes):
+                saw_system_anr = True
+                wait = next((n for n in nodes if n.attrib.get('text') == 'Wait'), None)
+                match = re.fullmatch(r'\[(\d+),(\d+)\]\[(\d+),(\d+)\]',
+                                     wait.attrib.get('bounds', '') if wait is not None else '')
+                if not match:
+                    break
                 left, top, right, bottom = map(int, match.groups())
-                return (left + right) // 2, (top + bottom) // 2
+                run('shell', 'input', 'tap', str((left + right) // 2), str((top + bottom) // 2))
+                time.sleep(5)
+                continue
+            for node in nodes:
+                description = node.attrib.get('content-desc', '').lower()
+                if 'gas pedal' not in description:
+                    continue
+                match = re.fullmatch(r'\[(\d+),(\d+)\]\[(\d+),(\d+)\]', node.attrib.get('bounds', ''))
+                if match:
+                    left, top, right, bottom = map(int, match.groups())
+                    return (left + right) // 2, (top + bottom) // 2
     except (subprocess.SubprocessError, ET.ParseError):
         pass
+    if saw_system_anr:
+        raise RuntimeError('Android system remained unresponsive while locating the accelerator')
     # The exported game is landscape, so the accelerator sits at the lower-right edge.
     dimensions = run('shell', 'wm', 'size').decode('utf-8', 'replace')
     matches = re.findall(r'(\d+)x(\d+)', dimensions)

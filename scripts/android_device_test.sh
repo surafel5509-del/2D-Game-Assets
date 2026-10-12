@@ -27,7 +27,7 @@ if [ ! -f "$APK" ]; then echo '::error::Editor APK was not built'; exit 1; fi
 "$ADB" shell wm dismiss-keyguard >/dev/null 2>&1 || true
 "$ADB" install -r "$APK" || { echo '::error::Could not install the editor APK on the emulator'; exit 1; }
 "$ADB" shell am start -W -n com.world2d.engine/.editor.MainActivity || true
-sleep 12
+sleep 20
 
 publish_blob() { # publish_blob <path> <label>
   local path="$1" label="$2"
@@ -121,7 +121,7 @@ fi
 publish_blob "$ARTIFACTS/hill-climb-gameplay.png" HILL_CLIMB_GAMEPLAY_SCREENSHOT
 
 if [ "$smoke_status" -ne 0 ]; then
-  collect_diagnostics "The on-device smoke test reported a failure (see the crash trace above)"
+  echo '::error::The on-device smoke test reported a failure (see the diagnostics above)'
   exit 1
 fi
 

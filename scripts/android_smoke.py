@@ -21,8 +21,19 @@ def command(*args, timeout=60):
 
 
 def hierarchy():
-    command('shell', 'uiautomator', 'dump', '/sdcard/world-smoke.xml')
-    return list(ET.fromstring(command('shell', 'cat', '/sdcard/world-smoke.xml')).iter('node'))
+    nodes = []
+    for _ in range(3):
+        command('shell', 'uiautomator', 'dump', '/sdcard/world-smoke.xml')
+        nodes = list(ET.fromstring(command('shell', 'cat', '/sdcard/world-smoke.xml')).iter('node'))
+        if not any("Process system isn't responding" in attr(node, 'text') for node in nodes):
+            return nodes
+        wait = find(nodes, text='Wait', clickable='true')
+        if wait is None:
+            break
+        print('::warning::Android system showed an ANR dialog; waiting for the emulator to recover')
+        tap(wait)
+        time.sleep(5)
+    return nodes
 
 
 def attr(node, name):
