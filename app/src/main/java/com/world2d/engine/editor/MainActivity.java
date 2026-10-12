@@ -174,7 +174,7 @@ public final class MainActivity extends Activity implements SceneView.Events {
             GameProject p=recent.get(i);Ui.add(body,projectCard(p),-1,-2);Ui.add(body,Ui.space(this,9),1,9);
         }
         Ui.add(body,Ui.space(this,25),1,25);
-        sectionTitle(body,"LEARN BY PLAYING","Five complete, editable example games");
+        sectionTitle(body,"LEARN BY PLAYING","Six complete, editable example games");
         for(int i=0;i<Examples.GENRES.length;i++){
             final String genre=Examples.GENRES[i];
             GameProject sample=Examples.create(genre,library);
@@ -183,7 +183,7 @@ public final class MainActivity extends Activity implements SceneView.Events {
                 genre.equals("adventure")?J.at(sample.scenes(),1):sample.firstScene());cover.setThumbnail(true);
             Ui.add(card,cover,-1,120);
             LinearLayout details=Ui.vertical(this);Ui.pad(details,this,14,12,14,13);
-            Ui.add(details,Ui.text(this,String.format("0%d / 05    •    %s",i+1,genre.toUpperCase()),10,Ui.GREEN,true),-1,22);
+            Ui.add(details,Ui.text(this,String.format("%02d / %02d    •    %s",i+1,Examples.GENRES.length,genre.toUpperCase()),10,Ui.GREEN,true),-1,22);
             Ui.add(details,Ui.text(this,Examples.NAMES[i],18,Ui.TEXT,true),-1,32);
             Ui.add(details,Ui.text(this,Examples.DESCRIPTIONS[i],12,Ui.MUTED,false),-1,-2);
             Ui.add(details,Ui.space(this,9),1,9);
@@ -398,7 +398,7 @@ public final class MainActivity extends Activity implements SceneView.Events {
         formLabel(form,"PROJECT NAME");Ui.add(form,name,-1,52);
         formLabel(form,"TEMPLATE");
         android.widget.Spinner templates=new android.widget.Spinner(this);
-        String[] options={"Empty 2D","Platformer","Top-down RPG","Shooter","Racing","Adventure","Puzzle","Arcade"};
+        String[] options={"Empty 2D","Platformer","Top-down RPG","Shooter","Racing","Hill Climb","Adventure","Puzzle","Arcade"};
         templates.setAdapter(new android.widget.ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,options));
         Ui.add(form,templates,-1,50);
         formLabel(form,"APPLICATION ID");
@@ -423,7 +423,7 @@ public final class MainActivity extends Activity implements SceneView.Events {
             int w,h;try{w=Integer.parseInt(width.getText().toString());h=Integer.parseInt(height.getText().toString());}
             catch(Exception ex){notify("Enter a valid resolution.");return;}
             if(w<160||h<160||w>4096||h>4096){notify("Resolution must be between 160 and 4096.");return;}
-            String[] genres={"empty","platformer","rpg","shooter","racing","adventure","puzzle","arcade"};
+            String[] genres={"empty","platformer","rpg","shooter","racing","hill-climb","adventure","puzzle","arcade"};
             String genre=genres[templates.getSelectedItemPosition()];
             GameProject created=genre.equals("empty")?GameProject.create(projectName,genre,w,h):Examples.create(genre,library);
             J.put(created.data,"name",projectName);J.put(created.data,"packageId",pkg);
@@ -714,14 +714,34 @@ public final class MainActivity extends Activity implements SceneView.Events {
     private void attachTouchControls(GameRuntime runtime){
         virtualControls=Ui.horizontal(this);virtualControls.setGravity(Gravity.BOTTOM|Gravity.CENTER_VERTICAL);
         Ui.pad(virtualControls,this,12,8,12,10);
-        String[] names={"◀","▼","▲","▶"};String[] actions={"left","down","up","right"};
-        for(int i=0;i<4;i++)touchButton(virtualControls,names[i],actions[i],runtime,false);
-        View spacer=new View(this);virtualControls.addView(spacer,new LinearLayout.LayoutParams(0,1,1));
-        touchButton(virtualControls,"E","interact",runtime,false);
-        touchButton(virtualControls,"◎","fire",runtime,false);
-        touchButton(virtualControls,"↟","jump",runtime,true);
+        if(runtime.hillClimb!=null){
+            hillTouchButton(virtualControls,"BRAKE","left",runtime,false);
+            hillTouchButton(virtualControls,"BOOST","up",runtime,true);
+            View spacer=new View(this);virtualControls.addView(spacer,new LinearLayout.LayoutParams(0,1,1));
+            hillTouchButton(virtualControls,"GAS","right",runtime,true);
+        }else{
+            String[] names={"◀","▼","▲","▶"};String[] actions={"left","down","up","right"};
+            for(int i=0;i<4;i++)touchButton(virtualControls,names[i],actions[i],runtime,false);
+            View spacer=new View(this);virtualControls.addView(spacer,new LinearLayout.LayoutParams(0,1,1));
+            touchButton(virtualControls,"E","interact",runtime,false);
+            touchButton(virtualControls,"◎","fire",runtime,false);
+            touchButton(virtualControls,"↟","jump",runtime,true);
+        }
         FrameLayout.LayoutParams controls=new FrameLayout.LayoutParams(-1,-2,Gravity.BOTTOM);
         viewLayer.addView(virtualControls,controls);
+    }
+    private void hillTouchButton(LinearLayout row,String label,String action,GameRuntime runtime,boolean accent){
+        TextView button=Ui.button(this,label,accent);button.setTextSize(11);button.setMinWidth(0);
+        button.setContentDescription(action.equals("right")?"Gas pedal":action.equals("left")?"Brake pedal":"Boost");
+        int width=Math.max(72,Math.min(104,(int)(getResources().getDisplayMetrics().widthPixels/
+            getResources().getDisplayMetrics().density/6)));
+        LinearLayout.LayoutParams params=new LinearLayout.LayoutParams(Ui.dp(this,width),Ui.dp(this,48));
+        params.rightMargin=Ui.dp(this,8);row.addView(button,params);
+        button.setOnTouchListener((view,event)->{
+            if(event.getActionMasked()==MotionEvent.ACTION_DOWN){runtime.setAction(action,true);return true;}
+            if(event.getActionMasked()==MotionEvent.ACTION_UP||event.getActionMasked()==MotionEvent.ACTION_CANCEL){
+                runtime.setAction(action,false);return true;}return true;
+        });
     }
     private void touchButton(LinearLayout row,String label,String action,GameRuntime runtime,boolean accent){
         TextView button=Ui.button(this,label,accent);button.setTextSize(17);

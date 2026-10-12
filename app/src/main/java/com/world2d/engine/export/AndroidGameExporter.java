@@ -74,7 +74,7 @@ public final class AndroidGameExporter {
                 "<path android:fillColor=\"#B9EA88\" android:pathData=\"M48,10L82,30v37L48,87 14,67V30z\"/>"+
                 "</vector>\n");
             String[] sources={"data/J.java","data/GameProject.java","data/ProjectStore.java",
-                "assets/AssetLibrary.java","runtime/ScriptVM.java","runtime/GameRuntime.java",
+                "assets/AssetLibrary.java","runtime/ScriptVM.java","runtime/GameRuntime.java","runtime/HillClimbMode.java",
                 "editor/SceneView.java","export/GameActivity.java"};
             for(String sourceFile:sources){String path="com/world2d/engine/"+sourceFile;
                 asset(zip,"app/src/main/java/"+path,"export-runtime/"+path);}

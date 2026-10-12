@@ -25,6 +25,7 @@ public final class GameRuntime {
         }
     }
     public final GameProject project;
+    public final HillClimbMode hillClimb;
     public JSONObject scene;
     public final Map<String, Double> variables = new HashMap<>();
     public final List<Particle> particles = new ArrayList<>();
@@ -52,8 +53,10 @@ public final class GameRuntime {
         variables.put("health", 3d); variables.put("score", 0d); variables.put("inventory", 0d);
         variables.put("wave", 1d); variables.put("lap", 0d);
         open(sceneId == null ? project.data.optString("startSceneId") : sceneId);
+        hillClimb = "hill-climb".equals(project.data.optString("genre")) ? new HillClimbMode(this.context,this) : null;
     }
-    private void changed() { if (onChange != null) onChange.run(); }
+    void changed() { if (onChange != null) onChange.run(); }
+    void camera(float x,float y,float zoom) { cameraX=x;cameraY=y;cameraZoom=zoom; }
     public void log(String level, String text) {
         logs.add(0, "[" + level.toUpperCase() + "] " + text);
         while (logs.size() > 100) logs.remove(logs.size() - 1);
@@ -88,6 +91,7 @@ public final class GameRuntime {
         variables.put("wave", 1d); variables.put("lap", 0d);
         elapsed = 0; paused = stopped = over = won = false; waveTimer = 0;
         open(sceneId == null ? project.data.optString("startSceneId") : sceneId);
+        if (hillClimb != null) hillClimb.restart();
     }
     public double stat(String name) { Double value = variables.get(name); return value == null ? 0 : value; }
     public JSONObject script(String id) {
@@ -223,12 +227,13 @@ public final class GameRuntime {
             }
         }
     }
-    private void sound(String key) {
+    void sound(String key) {
         String id = key.startsWith("builtin:") || key.startsWith("asset_") ? key : "builtin:sfx-" + key;
         try { library.playEffect(project,id,0.8f); }
         catch (Exception ex) { log("warning", "Sound unavailable: " + key); }
     }
     public void tap(float x, float y) {
+        if (hillClimb != null && over) { restart(null); return; }
         aimX = x; aimY = y;
         JSONObject best = null; int bestLayer = Integer.MIN_VALUE;
         JSONArray nodes = GameProject.nodes(scene);
@@ -277,6 +282,14 @@ public final class GameRuntime {
             if (action.equals("pause")) setPaused(true);
         }
         previousActions.clear(); previousActions.addAll(actions);
+        if (hillClimb != null) {
+            hillClimb.tick(dt);
+            stepParticles(dt);
+            frameMs=(System.nanoTime()-start)/1_000_000f;
+            fps=Math.round(1/Math.max(dt,0.0001f));
+            if ((int)(elapsed*5)!=(int)((elapsed-dt)*5)) changed();
+            return;
+        }
         if (actions.contains("fire")) shoot();
         for (int i=0;i<nodes.length();i++) ScriptVM.dispatch(this,J.at(nodes,i),"update",null,null,dt);
         updateAI(dt);

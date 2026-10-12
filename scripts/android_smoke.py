@@ -42,6 +42,11 @@ def tap(node):
     command('shell', 'input', 'tap', str(x), str(y))
 
 
+def hold(node, duration_ms=1800):
+    x, y = center(node)
+    command('shell', 'input', 'swipe', str(x), str(y), str(x), str(y), str(duration_ms))
+
+
 def scroll():
     command('shell', 'input', 'swipe', '165', '508', '163', '186', '390')
     time.sleep(1)
@@ -157,9 +162,9 @@ if new_project is not None:
         tap(template)
         time.sleep(2)
         nodes = hierarchy()
-        platformer = find(nodes, text='Platformer', clickable='true')
-        if platformer is not None:
-            tap(platformer)
+        hill_climb = find(nodes, text='Hill Climb', clickable='true')
+        if hill_climb is not None:
+            tap(hill_climb)
             time.sleep(2)
             nodes = hierarchy()
             create = find(nodes, text='Create', clickable='true')
@@ -167,27 +172,27 @@ if new_project is not None:
                 tap(create)
                 nodes = wait_for(lambda visible: find(visible, description='Play scene') is not None, timeout=25)
                 if find(nodes, description='Play scene') is not None:
-                    print('::notice::Template project (Platformer) created and opened in the editor')
+                    print('::notice::Hill Climb template project created and opened in the editor')
                     shoot('world-new-template-project.png')
                     command('shell', 'input', 'keyevent', '4')
                     time.sleep(2)
                 else:
-                    fail('Creating a project from the Platformer template did not open the editor', nodes)
+                    fail('Creating a project from the Hill Climb template did not open the editor', nodes)
             else:
-                print('::notice::Skipped the template project check: Create button not found')
+                print('::notice::Skipped the Hill Climb template check: Create button not found')
         else:
-            print('::notice::Skipped the template project check: Platformer entry not found')
+            print('::notice::Skipped the Hill Climb template check: Hill Climb option not found')
     else:
         print('::notice::Skipped the template project check: template spinner not found')
 else:
     print('::notice::Skipped the template project check: dashboard New project action not found')
 
-# --- Play a bundled example from the dashboard -------------------------------------------
+# --- Play the full Hill Climb example from the dashboard ---------------------------------
 # The sample cards are below the fold on a compact portrait phone.
-for _ in range(8):
+for _ in range(10):
     nodes = hierarchy()
     for index, node in enumerate(nodes):
-        if attr(node, 'text') == 'Forest Runner':
+        if attr(node, 'text') == 'Trailblazer: Hill Climb':
             play = next((other for other in nodes[index + 1:index + 30]
                          if 'Play' in attr(other, 'text') and attr(other, 'clickable') == 'true'), None)
             if play is not None:
@@ -198,15 +203,20 @@ for _ in range(8):
         continue
     break
 else:
-    fail('Could not find the Forest Runner Play button in the example card', nodes)
+    fail('Could not find the Trailblazer Hill Climb Play button in the example card', nodes)
 
-time.sleep(6)
+time.sleep(4)
 nodes = hierarchy()
 if not any(attr(n, 'content-desc') == 'Stop' for n in nodes):
-    fail('Bundled playable example failed to launch live preview', nodes)
-print('::notice::Bundled Forest Runner game entered live preview')
+    fail('Hill Climb example failed to launch live preview', nodes)
+gas = find(nodes, description='Gas pedal')
+if gas is not None:
+    hold(gas, 1800)
+time.sleep(2)
+nodes = hierarchy()
+print('::notice::Hill Climb example entered live preview; gas pedal and endless terrain are running')
 screenshot.parent.mkdir(parents=True, exist_ok=True)
-screenshot.write_bytes(command('exec-out', 'screencap', '-p'))
+screenshot.with_name('hill-climb-preview.png').write_bytes(command('exec-out', 'screencap', '-p'))
 
 # Press back once to stop preview and again to return to the saved-project dashboard.
 command('shell', 'input', 'keyevent', '4')

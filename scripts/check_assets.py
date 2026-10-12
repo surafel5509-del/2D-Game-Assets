@@ -47,6 +47,7 @@ if len(sys.argv) == 3 and sys.argv[1] == '--apk':
         'assets/library/catalog.json',
         'assets/export-runtime/wrapper_payload.txt',
         'assets/export-runtime/com/world2d/engine/runtime/GameRuntime.java',
+        'assets/export-runtime/com/world2d/engine/runtime/HillClimbMode.java',
         'assets/export-runtime/com/world2d/engine/export/GameActivity.java',
     })
     missing = sorted(required - packaged)

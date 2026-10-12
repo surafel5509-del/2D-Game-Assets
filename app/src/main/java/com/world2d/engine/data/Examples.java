@@ -1,19 +1,21 @@
 package com.world2d.engine.data;
 
 import com.world2d.engine.assets.AssetLibrary;
+import com.world2d.engine.runtime.HillClimbMode;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
-/** Five editable project documents created with the same scene, component and script format as user projects. */
+/** Six editable project documents created with the same scene, component and script format as user projects. */
 public final class Examples {
-    public static final String[] GENRES = {"platformer", "rpg", "shooter", "racing", "adventure"};
-    public static final String[] NAMES = {"Forest Runner", "Lantern Valley", "Neon Outpost", "Circuit Run", "The Verdant Key"};
+    public static final String[] GENRES = {"platformer", "rpg", "shooter", "racing", "adventure", "hill-climb"};
+    public static final String[] NAMES = {"Forest Runner", "Lantern Valley", "Neon Outpost", "Circuit Run", "The Verdant Key", "Trailblazer: Hill Climb"};
     public static final String[] DESCRIPTIONS = {
         "Run, jump, collect coins, and reach the summit.",
         "Talk to villagers and unlock the moonlit glade.",
         "Aim, fire and survive three enemy waves.",
         "Drive a modular car through a checkpoint course.",
-        "Explore two worlds, find the key, restore the grove."
+        "Explore two worlds, find the key, restore the grove.",
+        "Climb endless procedural hills, collect fuel and coins, then upgrade your garage."
     };
     private Examples() {}
     public static GameProject create(String genre, AssetLibrary library) {
@@ -23,6 +25,7 @@ public final class Examples {
             case "shooter": return shooter();
             case "racing": return racing(library);
             case "adventure": return adventure();
+            case "hill-climb": return hillClimb();
             case "puzzle": return puzzle();
             case "arcade": { GameProject p = shooter(); J.put(p.data, "name", "Arcade Starter"); J.put(p.data, "genre", "arcade"); return p; }
             default: return GameProject.create("Untitled World", "empty", 960, 540);
@@ -249,6 +252,74 @@ public final class Examples {
         J.put(J.obj(rival, "transform"), "rotation", 180);
         return p;
     }
+    private static GameProject hillClimb() {
+        final int seed=18473;
+        GameProject p=GameProject.create("Trailblazer: Hill Climb","hill-climb",960,540);
+        J.put(p.data,"orientation","landscape");J.put(p.data,"gravity",930);
+        JSONObject scene=p.firstScene();
+        J.put(scene,"name","Green Hills / Endless Run");J.put(scene,"background","#9bd8ee");
+
+        JSONObject terrain=GameProject.newNode("Procedural endless hills",0,0,960,540);
+        GameProject.addComponent(terrain,J.o("type","hillTerrain","seed",seed,"baseHeight",373,
+            "noise","smooth-value","infinite",true,"grassColor","#55a64f","dirtColor","#8c5739"));
+        J.put(terrain,"layer",-20);J.put(terrain,"locked",true);GameProject.nodes(scene).put(terrain);
+
+        double startX=104,startY=HillClimbMode.terrainHeight(startX,seed)-38;
+        JSONObject jeep=GameProject.newNode("Classic 4×4",startX,startY,122,64);
+        GameProject.addComponent(jeep,J.o("type","hillVehicle","vehicleIndex",0,"startX",startX,
+            "wheelBase",76,"wheelRadius",20,"wheelOffset",18,"mass",1,"centerOfMassY",13,
+            "engineTorque",590,"suspensionStiffness",9.5,"suspensionDamping",5));
+        GameProject.addComponent(jeep,GameProject.body("dynamic",1));
+        GameProject.addComponent(jeep,GameProject.collider(96,35,false));
+        GameProject.addComponent(jeep,J.o("type","camera","zoom",0.98,"follow",true,"smoothing",0.12));
+        J.put(jeep,"layer",5);GameProject.tag(jeep,"player");GameProject.nodes(scene).put(jeep);
+
+        for(int side:new int[]{-1,1}){
+            JSONObject wheel=GameProject.newNode(side<0?"Rear suspension wheel":"Front suspension wheel",
+                side*38,18,40,40);
+            J.put(wheel,"parentId",jeep.optString("id"));J.put(wheel,"layer",4);
+            GameProject.addComponent(wheel,J.o("type","hillWheel","side",side,"radius",20,"spin",0,
+                "springTravel",16,"friction",0.88));
+            JSONObject wheelCollider=GameProject.collider(40,40,false);
+            J.put(wheelCollider,"shape","circle");J.put(wheelCollider,"radius",20);
+            GameProject.addComponent(wheel,wheelCollider);GameProject.nodes(scene).put(wheel);
+        }
+        JSONObject driverHead=GameProject.newNode("Driver head hitbox",startX,startY-45,18,18);
+        GameProject.addComponent(driverHead,J.o("type","hillHead","radius",9,"crashOnGround",true));
+        JSONObject headCollider=GameProject.collider(18,18,true);J.put(headCollider,"shape","circle");
+        J.put(headCollider,"radius",9);GameProject.addComponent(driverHead,headCollider);
+        J.put(driverHead,"layer",8);GameProject.tag(driverHead,"driver-head");GameProject.nodes(scene).put(driverHead);
+
+        for(int i=0;i<7;i++){
+            double x=278+i*53;
+            JSONObject coin=GameProject.newNode("Trail coin",x,HillClimbMode.terrainHeight(x,seed)-76,34,34);
+            GameProject.addComponent(coin,J.o("type","hillPickup","kind","coin"));
+            GameProject.addComponent(coin,GameProject.sprite("builtin:prop-8"));
+            JSONObject hit=GameProject.collider(27,27,true);J.put(hit,"shape","circle");J.put(hit,"radius",14);
+            GameProject.addComponent(coin,hit);J.put(coin,"layer",7);GameProject.tag(coin,"coin");GameProject.nodes(scene).put(coin);
+        }
+        JSONObject fuel=GameProject.newNode("First fuel can",1120,HillClimbMode.terrainHeight(1120,seed)-91,42,48);
+        GameProject.addComponent(fuel,J.o("type","hillPickup","kind","fuel"));
+        GameProject.addComponent(fuel,GameProject.collider(34,42,true));
+        J.put(fuel,"layer",7);GameProject.tag(fuel,"fuel");GameProject.nodes(scene).put(fuel);
+        JSONObject diamond=GameProject.newNode("First diamond",1460,HillClimbMode.terrainHeight(1460,seed)-138,35,35);
+        GameProject.addComponent(diamond,J.o("type","hillPickup","kind","diamond"));
+        GameProject.addComponent(diamond,GameProject.sprite("builtin:prop-9"));
+        GameProject.addComponent(diamond,GameProject.collider(28,28,true));
+        J.put(diamond,"layer",7);GameProject.tag(diamond,"diamond");GameProject.nodes(scene).put(diamond);
+
+        JSONObject engine=GameProject.newNode("Engine audio",0,0,1,1);
+        GameProject.addComponent(engine,J.o("type","audio","assetId","builtin:sfx-engine",
+            "autoplay",true,"loop",true,"volume",0.16));
+        J.put(engine,"visible",false);J.put(engine,"locked",true);GameProject.nodes(scene).put(engine);
+        label(scene,"TRAILBLAZER  /  GREEN HILLS",485,55,22,"#f8fff1");
+        label(scene,"GAS TO CLIMB   ·   BRAKE TO PITCH   ·   COLLECT FUEL",490,91,13,"#264f51");
+        JSONObject sign=art(scene,"Trail marker","builtin:prop-5",822,
+            HillClimbMode.terrainHeight(822,seed)-41,46,58,2);
+        J.put(J.obj(sign,"transform"),"rotation",-4);
+        return p;
+    }
+
     private static GameProject adventure() {
         GameProject p = GameProject.create("The Verdant Key", "adventure", 960, 540); J.put(p.data, "gravity", 0);
         JSONObject menu = p.firstScene(); J.put(menu, "name", "Main Menu"); J.put(menu, "background", "#304d5d");

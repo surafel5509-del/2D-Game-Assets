@@ -1,15 +1,16 @@
-name: Android editor APK
+name: Hill Climb game + 2D WORLD Android APKs
 on:
   push:
-    branches: ["arena/01a0e402-2d-game-assets", "arena/01a10644-2d-game-assets"]
+    branches: ["arena/**"]
   pull_request:
   workflow_dispatch:
 permissions:
   contents: write
 jobs:
   build:
+    name: Build editor, export and play-test Hill Climb
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
       - name: Validate bundled resources
@@ -61,18 +62,17 @@ jobs:
             exit 1
           fi
           tail -2 /tmp/apk-validation.log
-      - name: Compile game-export instrumentation test
-        continue-on-error: true
+      - name: Compile Hill Climb export instrumentation test
         run: |
           if ! ./gradlew --no-daemon :app:assembleDebugAndroidTest > /tmp/android-test-build.log 2>&1; then
-            echo '::warning::Instrumentation test APK did not compile (editor APK is available)'
-            grep -E 'error:|FAILURE:|What went wrong|Could not |failed' /tmp/android-test-build.log | tail -12 | while IFS= read -r line; do echo "::notice::$line"; done
-          else
-            echo '::notice::Android instrumentation test APK compiled'
+            grep -E 'error:|FAILURE:|What went wrong|Could not |failed' /tmp/android-test-build.log | tail -18 | while IFS= read -r line; do echo "::error::$line"; done
+            tail -30 /tmp/android-test-build.log
+            exit 1
           fi
+          echo '::notice::Hill Climb exporter instrumentation APK compiled'
       - name: Device smoke test on an Android emulator
         uses: reactivecircus/android-emulator-runner@v2
-        timeout-minutes: 50
+        timeout-minutes: 60
         env:
           GH_TOKEN: ${{ github.token }}
         with:
@@ -95,8 +95,14 @@ jobs:
             ${{ runner.temp }}/world-device-test/ui-dump.xml
           if-no-files-found: ignore
       - uses: actions/upload-artifact@v4
-        if: success()
+        if: always()
         with:
-          name: 2D-WORLD-sample-game-debug-APK
-          path: ${{ runner.temp }}/world-device-test/export/app/build/outputs/apk/debug/app-debug.apk
+          name: Trailblazer-Hill-Climb-Android-debug-APK
+          path: ${{ runner.temp }}/world-device-test/hill-climb-debug.apk
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Trailblazer-Hill-Climb-exported-Gradle-project
+          path: ${{ runner.temp }}/world-device-test/game-export.zip
           if-no-files-found: ignore

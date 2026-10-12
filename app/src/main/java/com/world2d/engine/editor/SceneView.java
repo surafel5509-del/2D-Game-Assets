@@ -8,6 +8,7 @@ import android.graphics.DashPathEffect;
 import android.graphics.LinearGradient;
 import android.graphics.Matrix;
 import android.graphics.Paint;
+import android.graphics.Path;
 import android.graphics.PorterDuff;
 import android.graphics.PorterDuffColorFilter;
 import android.graphics.RadialGradient;
@@ -19,6 +20,7 @@ import com.world2d.engine.assets.AssetLibrary;
 import com.world2d.engine.data.GameProject;
 import com.world2d.engine.data.J;
 import com.world2d.engine.runtime.GameRuntime;
+import com.world2d.engine.runtime.HillClimbMode;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import java.util.ArrayList;
@@ -87,12 +89,14 @@ public final class SceneView extends View {
     }
     private float viewX(JSONObject world,float factor){
         if(runtime==null)return panX;
+        if(runtime.hillClimb!=null)return runtime.cameraX();
         float half=getWidth()/2f/factor;
         return half>=world.optInt("width")/2f?world.optInt("width")/2f:
             Math.max(half,Math.min(world.optInt("width")-half,runtime.cameraX()));
     }
     private float viewY(JSONObject world,float factor){
         if(runtime==null)return panY;
+        if(runtime.hillClimb!=null)return runtime.cameraY();
         float half=getHeight()/2f/factor;
         return half>=world.optInt("height")/2f?world.optInt("height")/2f:
             Math.max(half,Math.min(world.optInt("height")-half,runtime.cameraY()));
@@ -109,10 +113,13 @@ public final class SceneView extends View {
         int width=world.optInt("width",960),height=world.optInt("height",540);
         if(runtime==null&&!thumb){paint.reset();paint.setAntiAlias(true);paint.setColor(Color.argb(75,0,0,0));
             paint.setShadowLayer(16/scale,0,6/scale,Color.BLACK);canvas.drawRect(-3,-3,width+3,height+3,paint);paint.clearShadowLayer();}
-        int background=color(world.optString("background","#263d50"),Color.rgb(38,61,80));
-        paint.reset();paint.setAntiAlias(true);paint.setShader(new LinearGradient(0,0,0,height,
-            background,blend(background,Color.rgb(15,33,51),0.28f), Shader.TileMode.CLAMP));
-        canvas.drawRect(0,0,width,height,paint);paint.setShader(null);
+        if(isHillScene(world))drawHillBackdrop(canvas,world,cx,cy,scale);
+        else{
+            int background=color(world.optString("background","#263d50"),Color.rgb(38,61,80));
+            paint.reset();paint.setAntiAlias(true);paint.setShader(new LinearGradient(0,0,0,height,
+                background,blend(background,Color.rgb(15,33,51),0.28f), Shader.TileMode.CLAMP));
+            canvas.drawRect(0,0,width,height,paint);paint.setShader(null);
+        }
         if(runtime==null&&grid&&!thumb)drawGrid(canvas,width,height,scale);
         int calls=0;
         List<JSONObject> sorted=new ArrayList<>();JSONArray nodes=GameProject.nodes(world);
@@ -147,7 +154,233 @@ public final class SceneView extends View {
         paint.setColor(Color.argb(44,185,236,137));
         canvas.drawLine(w/2f,0,w/2f,h,paint);canvas.drawLine(0,h/2f,w,h/2f,paint);
     }
+    private boolean isHillScene(JSONObject world){
+        if(runtime!=null&&runtime.hillClimb!=null)return true;
+        JSONArray nodes=GameProject.nodes(world);
+        for(int i=0;i<nodes.length();i++)if(GameProject.component(J.at(nodes,i),"hillTerrain")!=null)return true;
+        return false;
+    }
+    private int hillSeed(JSONObject world){
+        JSONArray nodes=GameProject.nodes(world);
+        for(int i=0;i<nodes.length();i++){
+            JSONObject terrain=GameProject.component(J.at(nodes,i),"hillTerrain");
+            if(terrain!=null)return terrain.optInt("seed",18473);
+        }
+        return 18473;
+    }
+    private void drawHillBackdrop(Canvas canvas,JSONObject world,float cx,float cy,float scale){
+        int stage=runtime!=null&&runtime.hillClimb!=null?runtime.hillClimb.stage():HillClimbMode.stageAt(cx,104);
+        int seed=hillSeed(world);
+        int skyTop,skyBottom;
+        if(stage==1){skyTop=Color.rgb(255,185,116);skyBottom=Color.rgb(255,232,179);}
+        else if(stage==2){skyTop=Color.rgb(119,183,218);skyBottom=Color.rgb(222,244,250);}
+        else if(stage==3){skyTop=Color.rgb(25,34,79);skyBottom=Color.rgb(105,106,174);}
+        else{skyTop=Color.rgb(93,190,231);skyBottom=Color.rgb(211,243,247);}
+        float viewHeight=runtime!=null?getHeight()/Math.max(0.1f,scale):world.optInt("height",540);
+        float viewWidth=runtime!=null?getWidth()/Math.max(0.1f,scale):world.optInt("width",960);
+        float top=runtime!=null?cy-viewHeight/2-130:-120;
+        float bottom=runtime!=null?cy+viewHeight/2+330:world.optInt("height",540)+260;
+        float left=runtime!=null?cx-viewWidth/2-140:-140;
+        float right=runtime!=null?cx+viewWidth/2+140:world.optInt("width",960)+140;
+        paint.reset();paint.setAntiAlias(true);paint.setShader(new LinearGradient(0,top,0,bottom,
+            skyTop,skyBottom,Shader.TileMode.CLAMP));canvas.drawRect(left,top,right,bottom,paint);paint.setShader(null);
+        if(stage==3){
+            paint.setStyle(Paint.Style.FILL);paint.setColor(Color.argb(190,240,245,255));
+            for(int i=0;i<60;i++){
+                float x=left+(float)((i*79.7+seed*13)%Math.max(1,right-left));
+                float y=top+26+(i*47%175);
+                canvas.drawCircle(x,y,(i%7==0?1.7f:0.9f),paint);
+            }
+            paint.setColor(Color.rgb(226,233,255));canvas.drawCircle(cx+viewWidth*0.22f,92,33,paint);
+            paint.setColor(Color.rgb(105,106,174));canvas.drawCircle(cx+viewWidth*0.22f+12,82,31,paint);
+        }else{
+            paint.setColor(stage==1?Color.rgb(255,236,163):Color.rgb(255,242,183));
+            canvas.drawCircle(cx+viewWidth*0.23f,97,stage==1?40:31,paint);
+            paint.setColor(Color.argb(32,255,255,255));canvas.drawCircle(cx+viewWidth*0.23f,97,49,paint);
+            drawHillClouds(canvas,left,right,top,cx,seed,stage);
+        }
+        int far=stage==1?Color.rgb(217,171,122):stage==2?Color.rgb(153,200,213):
+            stage==3?Color.rgb(52,66,130):Color.rgb(113,178,178);
+        int near=stage==1?Color.rgb(192,145,106):stage==2?Color.rgb(121,178,198):
+            stage==3?Color.rgb(43,56,113):Color.rgb(78,151,146);
+        float horizon=350;
+        drawHillRidge(canvas,left,right,cx,0.16f,horizon,72,withAlpha(far,170),seed,510);
+        drawHillRidge(canvas,left,right,cx,0.29f,horizon+36,49,withAlpha(near,220),seed+21,360);
+    }
+    private void drawHillClouds(Canvas canvas,float left,float right,float top,float cx,int seed,int stage){
+        int color=stage==1?Color.argb(130,255,250,232):Color.argb(155,255,255,255);
+        float offset=cx*0.12f;int first=(int)Math.floor((left-offset)/310f),last=(int)Math.ceil((right-offset)/310f);
+        paint.reset();paint.setAntiAlias(true);paint.setColor(color);
+        for(int i=first;i<=last;i++){
+            float x=offset+i*310f+(float)(Math.sin(i*7.17+seed)*55);
+            float y=top+105+(float)(Math.sin(i*2.47+seed)*22);
+            canvas.drawCircle(x,y,17,paint);canvas.drawCircle(x+21,y-8,24,paint);
+            canvas.drawCircle(x+48,y,17,paint);canvas.drawRoundRect(x-1,y-1,x+49,y+15,8,8,paint);
+        }
+    }
+    private void drawHillRidge(Canvas canvas,float left,float right,float cameraX,float parallax,
+                               float baseline,float amplitude,int color,int seed,float wavelength){
+        float offset=cameraX*parallax;
+        float start=left-offset,end=right-offset;
+        Path path=new Path();path.moveTo(left,baseline);
+        int count=(int)Math.ceil((end-start)/36f);
+        for(int i=0;i<=count;i++){
+            float x=start+i*36f;
+            double a=Math.sin((x+seed*7)*Math.PI*2/wavelength);
+            double b=Math.sin((x+seed*19)*Math.PI*2/(wavelength*0.47));
+            path.lineTo(x+offset,(float)(baseline-amplitude*(0.58*a+0.28*b)));
+        }
+        path.lineTo(right,baseline+200);path.lineTo(left,baseline+200);path.close();
+        paint.reset();paint.setAntiAlias(true);paint.setColor(color);canvas.drawPath(path,paint);
+    }
+    private void drawHillTerrain(Canvas canvas,JSONObject world,JSONObject terrain,float scale){
+        int seed=terrain.optInt("seed",hillSeed(world));
+        int stage=runtime!=null&&runtime.hillClimb!=null?runtime.hillClimb.stage():HillClimbMode.stageAt(260,104);
+        float viewWidth=runtime!=null?getWidth()/Math.max(0.1f,scale):world.optInt("width",960);
+        float left=runtime!=null?runtime.cameraX()-viewWidth/2-80:-60;
+        float right=runtime!=null?runtime.cameraX()+viewWidth/2+80:world.optInt("width",960)+60;
+        float bottom=runtime!=null?runtime.cameraY()+getHeight()/Math.max(0.1f,scale)/2+500:world.optInt("height",540)+650;
+        drawHillTrees(canvas,left,right,seed,stage);
+        Path soil=new Path(),topLine=new Path(),strata=new Path();
+        int steps=Math.max(1,(int)Math.ceil((right-left)/12f));
+        for(int i=0;i<=steps;i++){
+            float x=left+(right-left)*i/steps;
+            float y=(float)HillClimbMode.terrainHeight(x,seed);
+            if(i==0){soil.moveTo(x,y);topLine.moveTo(x,y);strata.moveTo(x,y+68);}
+            else{soil.lineTo(x,y);topLine.lineTo(x,y);strata.lineTo(x,y+68+(float)Math.sin(x*0.013)*4);}
+        }
+        soil.lineTo(right,bottom);soil.lineTo(left,bottom);soil.close();
+        int dirtTop=stage==1?Color.rgb(204,151,84):stage==2?Color.rgb(153,183,181):
+            stage==3?Color.rgb(86,83,136):Color.rgb(146,91,57);
+        int dirtDeep=stage==1?Color.rgb(130,86,48):stage==2?Color.rgb(81,113,129):
+            stage==3?Color.rgb(43,39,83):Color.rgb(89,54,43);
+        int grass=stage==1?Color.rgb(189,151,74):stage==2?Color.rgb(225,244,234):
+            stage==3?Color.rgb(132,143,229):Color.rgb(76,164,72);
+        int highlight=stage==1?Color.rgb(234,193,105):stage==2?Color.rgb(249,255,245):
+            stage==3?Color.rgb(180,181,255):Color.rgb(129,207,87);
+        paint.reset();paint.setAntiAlias(true);paint.setShader(new LinearGradient(0,330,0,bottom,
+            dirtTop,dirtDeep,Shader.TileMode.CLAMP));canvas.drawPath(soil,paint);paint.setShader(null);
+        paint.setStyle(Paint.Style.STROKE);paint.setStrokeWidth(7/Math.max(0.55f,scale));
+        paint.setStrokeCap(Paint.Cap.ROUND);paint.setColor(grass);canvas.drawPath(topLine,paint);
+        paint.setStrokeWidth(2/Math.max(0.55f,scale));paint.setColor(highlight);canvas.drawPath(topLine,paint);
+        paint.setStrokeWidth(1.5f/Math.max(0.55f,scale));paint.setColor(Color.argb(75,52,40,34));
+        canvas.drawPath(strata,paint);paint.setStyle(Paint.Style.FILL);paint.setStrokeCap(Paint.Cap.BUTT);
+        float first=(float)Math.floor(left/33f)*33f;
+        for(float x=first;x<right;x+=33){
+            float y=(float)HillClimbMode.terrainHeight(x,seed)+29+(float)(Math.sin(x*0.09+seed)*13);
+            paint.setColor(stage==2?Color.argb(110,232,250,242):Color.argb(90,54,39,35));
+            canvas.drawOval(x,y,x+5+(Math.abs((int)x)%6),y+2.5f,paint);
+        }
+        if(stage==0){
+            paint.setColor(Color.argb(180,167,226,113));paint.setStrokeWidth(1.8f/Math.max(0.55f,scale));
+            for(float x=(float)Math.floor(left/58f)*58f;x<right;x+=58){
+                float y=(float)HillClimbMode.terrainHeight(x,seed)-3;
+                canvas.drawLine(x,y,x-2,y-5,paint);canvas.drawLine(x+1,y,x+4,y-4,paint);
+            }
+        }
+    }
+    private void drawHillTrees(Canvas canvas,float left,float right,int seed,int stage){
+        if(stage==3)return;
+        float spacing=stage==1?390:310;
+        int first=(int)Math.floor(left/spacing),last=(int)Math.ceil(right/spacing);
+        for(int i=first;i<=last;i++){
+            float x=i*spacing+(float)(Math.sin(i*13.11+seed)*64);
+            if(x<left-90||x>right+90)continue;
+            float base=(float)HillClimbMode.terrainHeight(x,seed)+5;
+            if(stage==1){
+                paint.setColor(Color.rgb(89,127,79));paint.setStrokeWidth(8);paint.setStrokeCap(Paint.Cap.ROUND);
+                canvas.drawLine(x,base,x,base-32,paint);canvas.drawLine(x,base-20,x-14,base-29,paint);
+                canvas.drawLine(x,base-13,x+15,base-24,paint);canvas.drawCircle(x-2,base-33,12,paint);
+            }else{
+                paint.setColor(stage==2?Color.rgb(73,128,118):Color.rgb(48,117,89));
+                canvas.drawRect(x-3,base-30,x+4,base,paint);
+                for(int tier=0;tier<3;tier++){
+                    float y=base-19-tier*18;
+                    Path pine=new Path();pine.moveTo(x,y-25);pine.lineTo(x-20+tier*4,y+7);pine.lineTo(x+20-tier*4,y+7);pine.close();
+                    paint.setColor(stage==2?Color.rgb(79+tier*8,143+tier*8,133+tier*6):Color.rgb(54+tier*7,137+tier*7,91+tier*5));
+                    canvas.drawPath(pine,paint);
+                }
+                if(stage==2){paint.setColor(Color.argb(220,237,250,244));canvas.drawCircle(x-5,base-46,4,paint);}
+            }
+        }
+        paint.setStrokeCap(Paint.Cap.BUTT);
+    }
+    private void drawHillVehicleBody(Canvas canvas,JSONObject node,JSONObject component){
+        int type=runtime!=null&&runtime.hillClimb!=null?runtime.hillClimb.vehicleIndex():component.optInt("vehicleIndex",0);
+        if(runtime==null){
+            float bob=(float)Math.sin(System.currentTimeMillis()/270.0)*1.2f;canvas.translate(0,bob);
+        }
+        if(type==1){
+            paint.setStyle(Paint.Style.STROKE);paint.setStrokeCap(Paint.Cap.ROUND);paint.setStrokeJoin(Paint.Join.ROUND);
+            paint.setStrokeWidth(7);paint.setColor(Color.rgb(220,72,55));
+            Path frame=new Path();frame.moveTo(-25,8);frame.lineTo(-4,-20);frame.lineTo(25,7);frame.lineTo(-25,8);
+            canvas.drawPath(frame,paint);paint.setStrokeWidth(4);paint.setColor(Color.rgb(70,79,88));
+            canvas.drawLine(-22,5,21,5,paint);canvas.drawLine(-6,-18,5,-32,paint);
+            paint.setStyle(Paint.Style.FILL);paint.setColor(Color.rgb(41,48,57));
+            canvas.drawRoundRect(-12,-27,13,-18,5,5,paint);canvas.drawCircle(4,-38,9,paint);
+            paint.setColor(Color.rgb(240,183,105));canvas.drawCircle(6,-39,6,paint);
+            paint.setStrokeCap(Paint.Cap.BUTT);return;
+        }
+        int body=type==3?Color.rgb(94,133,103):type==2?Color.rgb(227,103,44):Color.rgb(221,70,54);
+        int trim=type==3?Color.rgb(43,70,58):type==2?Color.rgb(115,57,39):Color.rgb(125,48,43);
+        paint.setStyle(Paint.Style.FILL);paint.setColor(Color.argb(48,19,33,34));
+        canvas.drawOval(-49,3,52,18,paint);
+        if(type==2){
+            paint.setColor(trim);canvas.drawRoundRect(-54,-28,53,11,10,10,paint);
+            paint.setColor(body);canvas.drawRoundRect(-50,-34,50,4,9,9,paint);
+            paint.setColor(Color.rgb(29,43,50));canvas.drawRoundRect(-28,-52,25,-28,9,9,paint);
+            paint.setColor(Color.rgb(153,218,226));canvas.drawRoundRect(-20,-47,-2,-31,4,4,paint);
+            canvas.drawRoundRect(3,-47,17,-31,4,4,paint);
+        }else{
+            paint.setColor(trim);canvas.drawRoundRect(-51,-25,51,11,9,9,paint);
+            paint.setColor(body);canvas.drawRoundRect(-49,-29,49,6,8,8,paint);
+            canvas.drawRoundRect(-25,-50,27,-25,9,9,paint);
+            paint.setColor(Color.rgb(118,194,210));canvas.drawRoundRect(-19,-45,0,-28,4,4,paint);
+            canvas.drawRoundRect(4,-45,21,-28,4,4,paint);
+            paint.setColor(Color.argb(115,255,255,255));canvas.drawLine(-15,-42,-6,-33,paint);
+            canvas.drawLine(8,-42,17,-33,paint);
+        }
+        paint.setColor(type==3?Color.rgb(189,198,142):Color.rgb(248,172,91));
+        canvas.drawRoundRect(21,-19,49,-11,4,4,paint);
+        paint.setColor(Color.rgb(248,223,139));canvas.drawRoundRect(43,-21,50,-13,2,2,paint);
+        paint.setColor(Color.rgb(53,62,67));canvas.drawRoundRect(47,-5,58,2,2,2,paint);
+        paint.setColor(trim);canvas.drawRoundRect(-41,-4,-34,4,2,2,paint);canvas.drawRoundRect(20,-4,27,4,2,2,paint);
+        paint.setColor(Color.rgb(255,226,160));canvas.drawCircle(-4,-36,8,paint);
+        paint.setColor(Color.rgb(47,71,80));canvas.drawArc(-13,-45,5,-29,180,180,false,paint);
+        paint.setColor(Color.rgb(40,50,58));canvas.drawCircle(-1,-37,1.3f,paint);
+        paint.setColor(Color.rgb(255,255,255));canvas.drawCircle(-2,-39,1.3f,paint);
+        paint.setColor(Color.argb(140,255,228,163));canvas.drawRoundRect(-38,-27,-28,-23,2,2,paint);
+    }
+    private void drawHillWheel(Canvas canvas,JSONObject wheel){
+        float r=(float)wheel.optDouble("radius",19),spin=(float)wheel.optDouble("spin",0);
+        canvas.save();canvas.rotate(spin);
+        paint.setStyle(Paint.Style.FILL);paint.setColor(Color.rgb(26,34,39));canvas.drawCircle(0,0,r,paint);
+        paint.setStyle(Paint.Style.STROKE);paint.setStrokeWidth(Math.max(2,r*0.17f));
+        paint.setColor(Color.rgb(49,60,63));canvas.drawCircle(0,0,r*0.78f,paint);
+        for(int i=0;i<8;i++){
+            canvas.save();canvas.rotate(i*45);
+            paint.setStrokeWidth(Math.max(1.5f,r*0.12f));paint.setColor(Color.rgb(101,111,108));
+            canvas.drawLine(0,-r*0.82f,0,-r*0.96f,paint);canvas.restore();
+        }
+        paint.setStyle(Paint.Style.FILL);paint.setColor(Color.rgb(188,195,183));canvas.drawCircle(0,0,r*0.49f,paint);
+        paint.setColor(Color.rgb(106,125,131));canvas.drawCircle(0,0,r*0.31f,paint);
+        paint.setColor(Color.rgb(238,206,125));canvas.drawCircle(0,0,r*0.12f,paint);
+        canvas.restore();
+    }
+    private void drawFuelCan(Canvas canvas,float width,float height){
+        float w=width,h=height;
+        paint.setStyle(Paint.Style.FILL);paint.setColor(Color.rgb(226,63,47));
+        canvas.drawRoundRect(-w/2+3,-h/2+7,w/2-3,h/2-2,6,6,paint);
+        paint.setColor(Color.rgb(171,39,38));canvas.drawRoundRect(-w/2+7,-h/2,w/2-10,-h/2+11,3,3,paint);
+        paint.setColor(Color.rgb(243,91,59));canvas.drawRoundRect(-w/2+10,-h/2+3,0,-h/2+11,3,3,paint);
+        paint.setColor(Color.rgb(255,229,176));paint.setStrokeWidth(2.5f);
+        canvas.drawRect(-w/2+9,-h/2+16,w/2-10,h/2-10,paint);
+        paint.setTextAlign(Paint.Align.CENTER);paint.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        paint.setTextSize(Math.min(w,h)*0.48f);canvas.drawText("F",0,h*0.23f,paint);paint.setTextAlign(Paint.Align.LEFT);
+    }
+
     private boolean hasAnimation(JSONObject world){
+
         JSONArray nodes=GameProject.nodes(world);
         for(int i=0;i<nodes.length();i++)if(GameProject.component(J.at(nodes,i),"animation")!=null)return true;
         return false;
@@ -238,6 +471,8 @@ public final class SceneView extends View {
                 }catch(NumberFormatException ignored){}
             }
         }
+        JSONObject hillTerrain=GameProject.component(node,"hillTerrain");
+        if(hillTerrain!=null){drawHillTerrain(canvas,world,hillTerrain,scale);calls++;}
         JSONObject sprite=GameProject.component(node,"sprite");
         if(sprite!=null){String id=frame(anim,seconds);if(id==null)id=sprite.optString("assetId");
             Bitmap bitmap=library.bitmap(project,id,Math.max(32,(int)(w*scale*2)));
@@ -258,6 +493,12 @@ public final class SceneView extends View {
             String alignment=label.optString("align","center");paint.setTextAlign(alignment.equals("left")?Paint.Align.LEFT:alignment.equals("right")?Paint.Align.RIGHT:Paint.Align.CENTER);
             canvas.drawText(label.optString("text",""),alignment.equals("left")?-w/2:alignment.equals("right")?w/2:0,paint.getTextSize()/3,paint);calls++;
         }
+        JSONObject hillWheel=GameProject.component(node,"hillWheel");
+        if(hillWheel!=null){drawHillWheel(canvas,hillWheel);calls++;}
+        JSONObject hillVehicle=GameProject.component(node,"hillVehicle");
+        if(hillVehicle!=null){drawHillVehicleBody(canvas,node,hillVehicle);calls++;}
+        JSONObject hillPickup=GameProject.component(node,"hillPickup");
+        if(hillPickup!=null&&"fuel".equals(hillPickup.optString("kind"))){drawFuelCan(canvas,w,h);calls++;}
         JSONObject light=GameProject.component(node,"light");
         if(light!=null){float r=(float)light.optDouble("radius",160);int c=color(light.optString("color","#ffe7ac"),Color.YELLOW);
             paint.reset();paint.setAntiAlias(true);paint.setShader(new RadialGradient(0,0,r,
@@ -290,6 +531,7 @@ public final class SceneView extends View {
         canvas.restore();
     }
     private void drawOverlay(Canvas canvas,JSONObject world,float scale){
+        if(runtime!=null&&runtime.hillClimb!=null){drawHillHud(canvas);return;}
         paint.reset();paint.setAntiAlias(true);paint.setTypeface(android.graphics.Typeface.create("sans-serif-medium",0));
         paint.setTextSize(11*density);paint.setColor(Color.rgb(217,231,231));
         float box=runtime!=null?210*density:190*density;
@@ -318,6 +560,101 @@ public final class SceneView extends View {
                 paint.setColor(Color.WHITE);paint.setShadowLayer(5*density,0,2*density,Color.BLACK);
                 canvas.drawText(runtime.message,getWidth()/2f,getHeight()*0.29f,paint);paint.clearShadowLayer();paint.setTextAlign(Paint.Align.LEFT);
             }
+        }
+    }
+    private void drawHillHud(Canvas canvas){
+        HillClimbMode hill=runtime.hillClimb;float d=density;float width=getWidth(),height=getHeight();
+        float leftW=Math.min(202*d,width*0.32f),rightW=Math.min(172*d,width*0.28f),centerW=Math.min(148*d,width*0.25f);
+        float panelY=12*d,panelH=91*d;
+        paint.reset();paint.setAntiAlias(true);paint.setColor(Color.argb(208,18,34,43));
+        canvas.drawRoundRect(12*d,panelY,12*d+leftW,panelY+panelH,12*d,12*d,paint);
+        float cx=width/2f,centerLeft=cx-centerW/2f;
+        canvas.drawRoundRect(centerLeft,panelY,centerLeft+centerW,panelY+panelH,12*d,12*d,paint);
+        float rightLeft=width-rightW-12*d;
+        canvas.drawRoundRect(rightLeft,panelY,width-12*d,panelY+panelH,12*d,12*d,paint);
+
+        paint.setTypeface(android.graphics.Typeface.create("sans-serif-condensed",android.graphics.Typeface.BOLD));
+        paint.setTextAlign(Paint.Align.LEFT);paint.setTextSize(12*d);paint.setColor(Color.rgb(246,251,235));
+        canvas.drawText("HILL CLIMB",24*d,31*d,paint);
+        paint.setTypeface(android.graphics.Typeface.create("sans-serif-medium",0));
+        paint.setTextSize(8.5f*d);paint.setColor(Color.rgb(169,196,188));
+        canvas.drawText(hill.vehicle().shortName+"  ·  BEST "+Math.round(hill.bestDistance())+" m",24*d,46*d,paint);
+        paint.setColor(Color.rgb(255,202,73));paint.setStyle(Paint.Style.FILL);
+        canvas.drawCircle(31*d,63*d,6*d,paint);paint.setColor(Color.rgb(255,245,190));
+        canvas.drawCircle(29*d,61*d,2*d,paint);
+        paint.setColor(Color.rgb(249,221,154));paint.setTextSize(10*d);
+        canvas.drawText(String.valueOf(hill.totalCoins()),43*d,67*d,paint);
+        paint.setColor(Color.rgb(92,209,242));Path gem=new Path();
+        gem.moveTo(97*d,57*d);gem.lineTo(103*d,63*d);gem.lineTo(97*d,69*d);gem.lineTo(91*d,63*d);gem.close();
+        canvas.drawPath(gem,paint);paint.setColor(Color.rgb(219,245,255));
+        canvas.drawText(String.valueOf(hill.totalDiamonds()),109*d,67*d,paint);
+        paint.setColor(Color.argb(150,5,19,25));canvas.drawRoundRect(24*d,76*d,leftW+2*d,86*d,5*d,5*d,paint);
+        float fuelEnd=24*d+(leftW-40*d)*hill.fuelFraction();
+        int fuelColor=hill.fuelFraction()<0.25f?Color.rgb(244,79,56):
+            hill.fuelFraction()<0.52f?Color.rgb(255,183,64):Color.rgb(121,218,112);
+        paint.setColor(fuelColor);canvas.drawRoundRect(24*d,76*d,Math.max(29*d,fuelEnd),86*d,5*d,5*d,paint);
+        paint.setTextSize(7.5f*d);paint.setColor(Color.WHITE);
+        canvas.drawText("FUEL  "+Math.round(hill.fuelFraction()*100)+"%",leftW-39*d,94*d,paint);
+
+        paint.setTextAlign(Paint.Align.CENTER);paint.setColor(Color.rgb(174,205,205));paint.setTextSize(8*d);
+        canvas.drawText("DISTANCE",cx,panelY+18*d,paint);
+        paint.setTypeface(android.graphics.Typeface.create("sans-serif-condensed",android.graphics.Typeface.BOLD));
+        paint.setTextSize(24*d);paint.setColor(Color.WHITE);
+        canvas.drawText(String.format(java.util.Locale.US,"%04d",Math.round(hill.distance())),cx,panelY+48*d,paint);
+        paint.setTypeface(android.graphics.Typeface.create("sans-serif-medium",0));paint.setTextSize(9*d);
+        paint.setColor(Color.rgb(255,219,136));canvas.drawText("METERS",cx,panelY+65*d,paint);
+        paint.setColor(Color.rgb(204,228,221));paint.setTextSize(8*d);
+        canvas.drawText("RUN  +"+hill.runCoins()+" COINS",cx,panelY+81*d,paint);
+
+        paint.setTextAlign(Paint.Align.RIGHT);paint.setTypeface(android.graphics.Typeface.create("sans-serif-medium",0));
+        paint.setTextSize(7.5f*d);paint.setColor(Color.rgb(169,196,188));
+        canvas.drawText("STAGE  "+(hill.stage()+1)+" / 04",width-23*d,panelY+23*d,paint);
+        paint.setTypeface(android.graphics.Typeface.create("sans-serif-condensed",android.graphics.Typeface.BOLD));
+        paint.setTextSize(10*d);paint.setColor(Color.rgb(243,249,229));
+        canvas.drawText(HillClimbMode.stageName(hill.stage()),width-23*d,panelY+42*d,paint);
+        paint.setTypeface(android.graphics.Typeface.create("sans-serif-medium",0));
+        paint.setTextSize(8*d);paint.setColor(Color.rgb(202,218,210));
+        canvas.drawText("ENGINE  "+(hill.engineLevel()+1)+"    TYRES  "+(hill.tyreLevel()+1),width-23*d,panelY+61*d,paint);
+        canvas.drawText("BOOST",width-23*d,panelY+78*d,paint);
+        float boostLeft=rightLeft+11*d,boostRight=width-23*d;
+        paint.setTextAlign(Paint.Align.LEFT);paint.setColor(Color.argb(145,5,19,25));
+        canvas.drawRoundRect(boostLeft,panelY+72*d,boostRight,panelY+82*d,4*d,4*d,paint);
+        paint.setColor(Color.rgb(81,204,226));
+        canvas.drawRoundRect(boostLeft,panelY+72*d,boostLeft+(boostRight-boostLeft)*hill.boost()/100f,
+            panelY+82*d,4*d,4*d,paint);
+
+        float gaugeX=width/2f,gaugeY=height+9*d,radius=54*d;
+        paint.setColor(Color.argb(195,15,29,37));paint.setStyle(Paint.Style.FILL);
+        canvas.drawRoundRect(gaugeX-77*d,height-48*d,gaugeX+77*d,height+20*d,18*d,18*d,paint);
+        paint.setStyle(Paint.Style.STROKE);paint.setStrokeCap(Paint.Cap.ROUND);paint.setStrokeWidth(5*d);
+        paint.setColor(Color.argb(100,229,238,220));
+        canvas.drawArc(new RectF(gaugeX-radius,gaugeY-radius,gaugeX+radius,gaugeY+radius),180,180,false,paint);
+        paint.setColor(hill.rpm()>5400?Color.rgb(250,105,64):Color.rgb(255,203,85));
+        canvas.drawArc(new RectF(gaugeX-radius,gaugeY-radius,gaugeX+radius,gaugeY+radius),180,
+            180*Math.max(0,Math.min(1,(hill.rpm()-850)/6050f)),false,paint);
+        float needle=(float)Math.toRadians(180+180*Math.max(0,Math.min(1,(hill.rpm()-850)/6050f)));
+        paint.setStrokeWidth(2*d);paint.setColor(Color.WHITE);
+        canvas.drawLine(gaugeX,gaugeY,gaugeX+(float)Math.cos(needle)*radius*0.78f,
+            gaugeY+(float)Math.sin(needle)*radius*0.78f,paint);
+        paint.setStyle(Paint.Style.FILL);paint.setColor(Color.rgb(255,218,145));canvas.drawCircle(gaugeX,gaugeY,4*d,paint);
+        paint.setTextAlign(Paint.Align.CENTER);paint.setTypeface(android.graphics.Typeface.create("sans-serif-condensed",android.graphics.Typeface.BOLD));
+        paint.setTextSize(8*d);paint.setColor(Color.rgb(202,220,210));canvas.drawText("RPM",gaugeX,height-23*d,paint);
+        paint.setTextSize(9*d);paint.setColor(Color.WHITE);canvas.drawText(String.valueOf(Math.round(hill.rpm())),gaugeX,height-10*d,paint);
+        paint.setStrokeCap(Paint.Cap.BUTT);paint.setTextAlign(Paint.Align.LEFT);paint.setStyle(Paint.Style.FILL);
+
+        if(runtime.over){
+            paint.setColor(Color.argb(140,7,16,23));canvas.drawRect(0,0,width,height,paint);
+            float cardW=Math.min(390*d,width-32*d),cardH=176*d,cardX=(width-cardW)/2,cardY=(height-cardH)/2;
+            paint.setColor(Color.rgb(25,42,49));canvas.drawRoundRect(cardX,cardY,cardX+cardW,cardY+cardH,18*d,18*d,paint);
+            paint.setTextAlign(Paint.Align.CENTER);paint.setTypeface(android.graphics.Typeface.create("sans-serif-condensed",android.graphics.Typeface.BOLD));
+            paint.setTextSize(25*d);paint.setColor(Color.rgb(255,207,133));
+            canvas.drawText(runtime.message.contains("FUEL")?"OUT OF FUEL":"RUN OVER",width/2f,cardY+43*d,paint);
+            paint.setTypeface(android.graphics.Typeface.create("sans-serif-medium",0));paint.setTextSize(11*d);
+            paint.setColor(Color.WHITE);canvas.drawText("DISTANCE  "+Math.round(hill.distance())+" m",width/2f,cardY+77*d,paint);
+            canvas.drawText("BEST  "+Math.round(hill.bestDistance())+" m     ·     +"+hill.runCoins()+" COINS",width/2f,cardY+102*d,paint);
+            paint.setTextSize(9*d);paint.setColor(Color.rgb(175,202,191));
+            canvas.drawText("Use the pause menu to retry or visit the garage",width/2f,cardY+137*d,paint);
+            canvas.drawText("Tap to restart",width/2f,cardY+157*d,paint);paint.setTextAlign(Paint.Align.LEFT);
         }
     }
     private static int withAlpha(int color,int alpha){return (color&0x00ffffff)|(Math.min(255,Math.max(0,alpha))<<24);}

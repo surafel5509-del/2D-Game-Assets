@@ -1,0 +1,127 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" role="img" aria-labelledby="title desc">
+  <title id="title">Trailblazer: Hill Climb — gameplay preview</title>
+  <desc id="desc">A red off-road jeep climbs a green endless hill beneath a bright sky, with distance, fuel, coin and boost controls.</desc>
+  <defs>
+    <linearGradient id="sky" x2="0" y2="1"><stop stop-color="#58b8e3"/><stop offset="1" stop-color="#d9f3ef"/></linearGradient>
+    <linearGradient id="earth" x2="0" y2="1"><stop stop-color="#96613f"/><stop offset="1" stop-color="#583c38"/></linearGradient>
+    <linearGradient id="red" x2="0" y2="1"><stop stop-color="#f47751"/><stop offset="1" stop-color="#c83d38"/></linearGradient>
+    <linearGradient id="glass" x2="0" y2="1"><stop stop-color="#c2f0ec"/><stop offset="1" stop-color="#65b4c3"/></linearGradient>
+    <linearGradient id="panel" x2="0" y2="1"><stop stop-color="#1c3844" stop-opacity=".96"/><stop offset="1" stop-color="#142932" stop-opacity=".91"/></linearGradient>
+    <linearGradient id="fuel" x2="1"><stop stop-color="#e84e3b"/><stop offset="1" stop-color="#ff9a53"/></linearGradient>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="180%"><feGaussianBlur stdDeviation="12"/></filter>
+    <filter id="soft"><feGaussianBlur stdDeviation="26"/></filter>
+    <pattern id="grain" width="44" height="36" patternUnits="userSpaceOnUse">
+      <circle cx="8" cy="9" r="2" fill="#e2bc8a" opacity=".38"/><circle cx="29" cy="25" r="1.5" fill="#302a2a" opacity=".24"/>
+      <path d="M16 29l7-2" stroke="#e2bc8a" stroke-opacity=".18" stroke-width="2"/>
+    </pattern>
+  </defs>
+
+  <!-- Sky and far hills -->
+  <rect width="1280" height="720" fill="url(#sky)"/>
+  <circle cx="1010" cy="152" r="70" fill="#ffe7a2" opacity=".18" filter="url(#soft)"/>
+  <circle cx="1010" cy="152" r="39" fill="#fff0ad"/>
+  <g fill="#fff" opacity=".72">
+    <ellipse cx="310" cy="151" rx="47" ry="18"/><ellipse cx="344" cy="140" rx="37" ry="25"/><ellipse cx="379" cy="153" rx="47" ry="16"/>
+    <ellipse cx="780" cy="225" rx="37" ry="14"/><ellipse cx="807" cy="216" rx="29" ry="19"/><ellipse cx="837" cy="226" rx="36" ry="13"/>
+  </g>
+  <path d="M0 423 105 336 181 382 291 287 403 385 504 314 615 395 733 295 841 387 960 313 1083 394 1178 326 1280 402V520H0Z" fill="#79afa7" opacity=".62"/>
+  <path d="M0 445 123 367 230 414 339 337 458 429 562 358 686 425 801 347 916 430 1047 354 1163 424 1280 375V545H0Z" fill="#528f82" opacity=".66"/>
+  <g opacity=".2" fill="#e8f3cb"><circle cx="91" cy="397" r="3"/><circle cx="272" cy="385" r="4"/><circle cx="486" cy="402" r="3"/><circle cx="735" cy="377" r="4"/><circle cx="1045" cy="399" r="3"/></g>
+
+  <!-- Procedural ground -->
+  <path d="M0 492 C92 474 135 446 205 452 C275 459 297 491 365 485 C435 479 455 422 520 415 C586 408 610 447 675 443 C741 439 762 390 833 387 C911 384 945 431 1009 427 C1087 422 1114 369 1186 375 C1225 378 1255 393 1280 405 V720H0Z" fill="url(#earth)"/>
+  <path d="M0 492 C92 474 135 446 205 452 C275 459 297 491 365 485 C435 479 455 422 520 415 C586 408 610 447 675 443 C741 439 762 390 833 387 C911 384 945 431 1009 427 C1087 422 1114 369 1186 375 C1225 378 1255 393 1280 405 V720H0Z" fill="url(#grain)" opacity=".86"/>
+  <path d="M0 492 C92 474 135 446 205 452 C275 459 297 491 365 485 C435 479 455 422 520 415 C586 408 610 447 675 443 C741 439 762 390 833 387 C911 384 945 431 1009 427 C1087 422 1114 369 1186 375 C1225 378 1255 393 1280 405" fill="none" stroke="#3f963f" stroke-width="18" stroke-linecap="round"/>
+  <path d="M0 486 C92 468 135 440 205 446 C275 453 297 485 365 479 C435 473 455 416 520 409 C586 402 610 441 675 437 C741 433 762 384 833 381 C911 378 945 425 1009 421 C1087 416 1114 363 1186 369 C1225 372 1255 387 1280 399" fill="none" stroke="#91d96b" stroke-width="4" stroke-linecap="round"/>
+  <g fill="#a5d778" opacity=".9"><path d="M180 454l-5-13 11 11 3-16 5 17 8-11-3 13z"/><path d="M402 469l-4-11 9 8 2-13 4 13 7-9-2 11z"/><path d="M955 421l-4-12 10 10 2-14 4 14 8-10-3 13z"/></g>
+
+  <!-- Small pines and shrubs, tucked into the terrain -->
+  <g opacity=".96">
+    <g transform="translate(119 448)"><path d="M-3 1h7v22h-7z" fill="#6c4935"/><path d="M0-49-22-15h44zM0-34-18-5h36zM0-20-14 6h28z" fill="#2f7656"/><path d="M-7-30l8-13 6 9" fill="none" stroke="#81bd70" stroke-width="3"/></g>
+    <g transform="translate(330 482) scale(.82)"><path d="M-3 1h7v22h-7z" fill="#6c4935"/><path d="M0-49-22-15h44zM0-34-18-5h36zM0-20-14 6h28z" fill="#337b56"/></g>
+    <g transform="translate(1100 409) scale(1.08)"><path d="M-3 1h7v22h-7z" fill="#6c4935"/><path d="M0-49-22-15h44zM0-34-18-5h36zM0-20-14 6h28z" fill="#2d7650"/><path d="M-7-30l8-13 6 9" fill="none" stroke="#90c879" stroke-width="3"/></g>
+  </g>
+
+  <!-- Coins and fuel can -->
+  <g transform="translate(853 329)"><circle r="20" fill="#b77b25"/><circle r="16" fill="#f7bd42" stroke="#ffe795" stroke-width="3"/><path d="M-5-8h8l-5 7h7l-11 12 3-9h-7z" fill="#fff2be"/></g>
+  <g transform="translate(906 342)"><circle r="20" fill="#b77b25"/><circle r="16" fill="#f7bd42" stroke="#ffe795" stroke-width="3"/><path d="M-5-8h8l-5 7h7l-11 12 3-9h-7z" fill="#fff2be"/></g>
+  <g transform="translate(959 354)"><circle r="20" fill="#b77b25"/><circle r="16" fill="#f7bd42" stroke="#ffe795" stroke-width="3"/><path d="M-5-8h8l-5 7h7l-11 12 3-9h-7z" fill="#fff2be"/></g>
+  <g transform="translate(1080 329) rotate(8)">
+    <rect x="-20" y="-23" width="39" height="49" rx="7" fill="#a82f2c"/>
+    <path d="M-11-26h17v8h-17zM3-19h12" fill="none" stroke="#f88a58" stroke-width="5" stroke-linecap="round"/>
+    <rect x="-13" y="-13" width="25" height="30" rx="4" fill="#ed5841" stroke="#ffd29c" stroke-width="2"/>
+    <path d="M-6-5h12M0-11v19" stroke="#fff1d0" stroke-width="3" stroke-linecap="round"/>
+  </g>
+
+  <!-- Red trail jeep -->
+  <ellipse cx="628" cy="473" rx="136" ry="18" fill="#1e3437" opacity=".36" filter="url(#shadow)"/>
+  <g transform="translate(627 406) rotate(-8)">
+    <!-- tyres -->
+    <g transform="translate(-72 45)"><circle r="35" fill="#202b2e"/><circle r="28" fill="#39474a" stroke="#171f22" stroke-width="5"/><circle r="17" fill="#bdc6b6"/><circle r="10" fill="#657b7b"/><circle r="4" fill="#ffe0a0"/><g stroke="#98a6a0" stroke-width="3"><path d="M0-25v-7M18-18l5-5M25 0h7M18 18l5 5M0 25v7M-18 18l-5 5M-25 0h-7M-18-18l-5-5"/></g></g>
+    <g transform="translate(73 45)"><circle r="35" fill="#202b2e"/><circle r="28" fill="#39474a" stroke="#171f22" stroke-width="5"/><circle r="17" fill="#bdc6b6"/><circle r="10" fill="#657b7b"/><circle r="4" fill="#ffe0a0"/><g stroke="#98a6a0" stroke-width="3"><path d="M0-25v-7M18-18l5-5M25 0h7M18 18l5 5M0 25v7M-18 18l-5 5M-25 0h-7M-18-18l-5-5"/></g></g>
+    <!-- undercarriage and body -->
+    <path d="M-111 14h219v22h-13l-10-10H-80l-11 10h-20z" fill="#49383a"/>
+    <path d="M-112-5q0-13 15-16l36-2 18-37q7-13 22-13h49q17 0 25 14l20 36 32 5q12 2 12 16v27H-98q-14 0-14-13z" fill="url(#red)" stroke="#9b3534" stroke-width="5" stroke-linejoin="round"/>
+    <path d="M-39-24-22-58q4-8 14-8h17v42zM16-66h12q11 0 16 10l17 32H16z" fill="url(#glass)" stroke="#6e3440" stroke-width="5" stroke-linejoin="round"/>
+    <path d="M-7-65v43M14-66v43" stroke="#a63739" stroke-width="5"/>
+    <path d="M-100-8h17v18h-17z" rx="4" fill="#ffe19b"/><path d="M-113-1h10v12h-10z" fill="#f7955d"/>
+    <path d="M89-2h21v10H89z" fill="#26383d"/><path d="M-36 0v27M34 0v27" stroke="#9c3638" stroke-width="4"/>
+    <path d="M-90 18h181" stroke="#ffba75" stroke-width="4" opacity=".8"/>
+    <!-- driver -->
+    <path d="M-1-19q5-20 24-14 12 4 13 20l-2 17H1z" fill="#324b52"/>
+    <circle cx="18" cy="-42" r="15" fill="#f5c482"/>
+    <path d="M3-43q2-19 18-19 16 1 17 18l-6-4-23 3z" fill="#263e48"/>
+    <path d="M24-42l7 2" stroke="#303f43" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="27" cy="-45" r="2" fill="#253943"/>
+    <path d="M-110 27h31M81 27h29" stroke="#222f32" stroke-width="7" stroke-linecap="round"/>
+  </g>
+
+  <!-- Top HUD -->
+  <g font-family="Arial, sans-serif">
+    <rect x="22" y="20" width="258" height="116" rx="17" fill="url(#panel)" stroke="#d8f1db" stroke-opacity=".2"/>
+    <text x="42" y="49" fill="#f5ffed" font-size="17" font-weight="700" letter-spacing="1.6">TRAILBLAZER</text>
+    <text x="42" y="69" fill="#aac8bc" font-size="11" font-weight="700" letter-spacing="1.2">HILL CLIMB  ·  CLASSIC 4×4</text>
+    <circle cx="51" cy="94" r="8" fill="#f7bd42" stroke="#fff0b0" stroke-width="2"/><path d="M49 89h4l-3 5h4l-6 7 2-5h-4z" fill="#fff4c4"/>
+    <text x="68" y="99" fill="#ffe3a1" font-size="15" font-weight="700">2,480</text>
+    <path d="M146 86l9 8-9 9-9-9z" fill="#58d4f4" stroke="#d9faff" stroke-width="2"/>
+    <text x="163" y="99" fill="#d6f5ff" font-size="15" font-weight="700">08</text>
+    <rect x="42" y="112" width="217" height="8" rx="4" fill="#07191f"/>
+    <rect x="42" y="112" width="155" height="8" rx="4" fill="#89dc69"/>
+    <text x="258" y="108" fill="#e6f0d9" font-size="8" text-anchor="end" letter-spacing="1">FUEL 72%</text>
+
+    <rect x="537" y="20" width="206" height="116" rx="17" fill="url(#panel)" stroke="#d8f1db" stroke-opacity=".2"/>
+    <text x="640" y="47" fill="#aecac0" font-size="11" font-weight="700" text-anchor="middle" letter-spacing="1.7">DISTANCE</text>
+    <text x="640" y="88" fill="#fff" font-size="37" font-weight="700" text-anchor="middle">0248</text>
+    <text x="640" y="108" fill="#ffd78c" font-size="10" font-weight="700" text-anchor="middle" letter-spacing="2">METERS</text>
+    <text x="640" y="126" fill="#c4dcd2" font-size="9" text-anchor="middle">RUN  +18 COINS</text>
+
+    <rect x="1000" y="20" width="258" height="116" rx="17" fill="url(#panel)" stroke="#d8f1db" stroke-opacity=".2"/>
+    <text x="1235" y="46" fill="#aac8bc" font-size="10" font-weight="700" text-anchor="end" letter-spacing="1.4">STAGE  1 / 04</text>
+    <text x="1235" y="67" fill="#f5ffed" font-size="15" font-weight="700" text-anchor="end">GREEN HILLS</text>
+    <text x="1235" y="89" fill="#c3d7cc" font-size="10" text-anchor="end">ENGINE  2    TYRES  1</text>
+    <text x="1040" y="113" fill="#dcece2" font-size="9" font-weight="700" letter-spacing="1">BOOST</text>
+    <rect x="1085" y="105" width="150" height="10" rx="5" fill="#07191f"/>
+    <rect x="1085" y="105" width="107" height="10" rx="5" fill="#53cbe0"/>
+  </g>
+
+  <!-- Bottom driving controls -->
+  <path d="M0 631q0-22 22-22h1236q22 0 22 22v89H0z" fill="#10262c" opacity=".92"/>
+  <g font-family="Arial, sans-serif" font-weight="700" text-anchor="middle">
+    <rect x="40" y="641" width="154" height="59" rx="17" fill="#354f54" stroke="#bbd5ce" stroke-opacity=".38"/>
+    <text x="117" y="678" fill="#f5f8e9" font-size="16" letter-spacing="1.4">BRAKE</text>
+    <rect x="214" y="641" width="128" height="59" rx="17" fill="#354f54" stroke="#bbd5ce" stroke-opacity=".38"/>
+    <text x="278" y="678" fill="#f5f8e9" font-size="14" letter-spacing="1">⚡ BOOST</text>
+    <rect x="1086" y="641" width="154" height="59" rx="17" fill="url(#fuel)" stroke="#ffd5b0" stroke-opacity=".6"/>
+    <text x="1163" y="678" fill="#fff9ec" font-size="17" letter-spacing="1.8">GAS</text>
+  </g>
+  <g transform="translate(640 640)" font-family="Arial, sans-serif" text-anchor="middle">
+    <path d="M-88 0a88 88 0 0 1 176 0" fill="none" stroke="#c5d5c6" stroke-opacity=".22" stroke-width="10" stroke-linecap="round"/>
+    <path d="M-88 0a88 88 0 0 1 132-76" fill="none" stroke="#ffc95f" stroke-width="10" stroke-linecap="round"/>
+    <path d="M0 0l44-58" stroke="#fff" stroke-width="4" stroke-linecap="round"/><circle r="8" fill="#ffdb91"/>
+    <text x="0" y="-18" fill="#ccddd3" font-size="11" font-weight="700" letter-spacing="1.4">RPM</text>
+    <text x="0" y="4" fill="#fff" font-size="12" font-weight="700">4,200</text>
+  </g>
+  <rect x="1217" y="151" width="42" height="42" rx="13" fill="#18333b" stroke="#d9eee1" stroke-opacity=".3"/>
+  <path d="M1232 164v16M1244 164v16" stroke="#fff" stroke-width="4" stroke-linecap="round"/>
+  <text x="31" y="702" fill="#c7ddd4" opacity=".56" font-family="Arial, sans-serif" font-size="9" letter-spacing="1.3">GAMEPLAY PREVIEW · SAMPLE UI / ORIGINAL ENGINE ART</text>
+</svg>

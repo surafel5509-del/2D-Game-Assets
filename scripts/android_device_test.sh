@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Runs inside the emulator started by reactivecircus/android-emulator-runner.
 #
-# Installs the editor APK, then drives the real app: dashboard, the New project wizard
-# (the flow that used to crash), live preview of the created project, a template project,
-# a bundled example, project reopening, the exported-game build and the export test.
+# Installs the editor APK, exercises the new-project/template flows, drives the full
+# Hill Climb example, exports the actual game project, builds its standalone APK,
+# installs it, and captures a real gameplay screenshot.
 # Every failure prints the on-device crash trace and publishes full diagnostics as git
 # blobs whose SHAs are printed as ::notice:: so the run can be inspected from the API.
 set -u
@@ -62,7 +62,7 @@ collect_diagnostics() { # collect_diagnostics <reason>
 }
 
 smoke_status=0
-if ! python3 scripts/android_smoke.py "$ADB" "$ARTIFACTS/gameplay.png" > "$ARTIFACTS/smoke.log" 2>&1; then
+if ! python3 scripts/android_smoke.py "$ADB" "$ARTIFACTS/hill-climb-preview.png" > "$ARTIFACTS/smoke.log" 2>&1; then
   smoke_status=1
   cat "$ARTIFACTS/smoke.log" || true
   collect_diagnostics "The on-device smoke test failed: the new-project or example flow did not complete"
@@ -71,48 +71,58 @@ else
 fi
 
 if [ "$smoke_status" -eq 0 ]; then
-  publish_blob "$ARTIFACTS/gameplay.png" GAMEPLAY_SCREENSHOT
+  publish_blob "$ARTIFACTS/hill-climb-preview.png" HILL_CLIMB_PREVIEW_SCREENSHOT
   for shot in world-new-project-editor.png world-new-project-preview.png world-new-template-project.png; do
     publish_blob "$ARTIFACTS/$shot" "${shot%.png}"
   done
 fi
 
-# The exported game must still build as a separate Android project; the export test proves it.
-if [ -f "$TEST_APK" ]; then
-  if ! "$ADB" install -r "$TEST_APK"; then
-    echo '::warning::Could not install the export instrumentation APK; exported-game build was not device-tested'
-  else
-    "$ADB" shell am instrument -w com.world2d.engine.test/androidx.test.runner.AndroidJUnitRunner > "$ARTIFACTS/instrumentation.log" 2>&1 || true
-    if grep -q 'OK (1 test)' "$ARTIFACTS/instrumentation.log"; then
-      echo '::notice::Exporter instrumentation verified native sources, authored scenes and imported assets in the game ZIP'
-      "$ADB" exec-out run-as com.world2d.engine cat files/game-export-smoke.zip > "$ARTIFACTS/game-export.zip" 2>/dev/null || true
-      mkdir -p "$ARTIFACTS/export"
-      if [ -s "$ARTIFACTS/game-export.zip" ] && unzip -q -o "$ARTIFACTS/game-export.zip" -d "$ARTIFACTS/export"; then
-        chmod +x "$ARTIFACTS/export/gradlew" 2>/dev/null || true
-        if bash "$ARTIFACTS/export/gradlew" -p "$ARTIFACTS/export" --no-daemon :app:assembleDebug > "$ARTIFACTS/export-build.log" 2>&1; then
-          echo '::notice::Actual exported game compiled to a separate installable Android APK'
-          cp "$ARTIFACTS/export/app/build/outputs/apk/debug/app-debug.apk" "$ARTIFACTS/sample-game.apk" 2>/dev/null || true
-        else
-          grep -E 'error:|FAILURE:|What went wrong|Could not |failed' "$ARTIFACTS/export-build.log" | tail -12 | while IFS= read -r line; do echo "::notice::Export build: $line"; done
-          echo '::warning::Exported game project did not assemble its APK'
-        fi
-      else
-        echo '::warning::Exported game ZIP was not produced by the instrumentation test'
-      fi
-    else
-      grep -m 20 -E 'FAILURES|Error|Exception|failed' "$ARTIFACTS/instrumentation.log" | while IFS= read -r line; do echo "::error::Instrument: $line"; done
-      publish_blob "$ARTIFACTS/instrumentation.log" INSTRUMENTATION_LOG
-      echo '::error::Actual Android game project ZIP export test failed'
-      exit 1
-    fi
-  fi
-else
-  echo '::warning::Instrumentation APK unavailable; exported-game build was not device-tested'
+# Build the real Hill Climb game project exported by the editor and install it on-device.
+if [ ! -f "$TEST_APK" ]; then echo '::error::Exporter instrumentation APK is missing'; exit 1; fi
+if ! "$ADB" install -r "$TEST_APK"; then
+  echo '::error::Could not install the game-export instrumentation APK'; exit 1
 fi
+if ! "$ADB" shell am instrument -w com.world2d.engine.test/androidx.test.runner.AndroidJUnitRunner > "$ARTIFACTS/instrumentation.log" 2>&1; then
+  grep -m 20 -E 'FAILURES|Error|Exception|failed' "$ARTIFACTS/instrumentation.log" | while IFS= read -r line; do echo "::error::Instrument: $line"; done
+  publish_blob "$ARTIFACTS/instrumentation.log" INSTRUMENTATION_LOG
+  echo '::error::Hill Climb Android game export test failed'
+  exit 1
+fi
+if ! grep -q 'OK (1 test)' "$ARTIFACTS/instrumentation.log"; then
+  cat "$ARTIFACTS/instrumentation.log"
+  echo '::error::Hill Climb game export instrumentation did not pass'
+  exit 1
+fi
+echo '::notice::Exporter instrumentation verified Hill Climb scene nodes, physics components, runtime sources and game resources'
+if ! "$ADB" exec-out run-as com.world2d.engine cat files/game-export-smoke.zip > "$ARTIFACTS/game-export.zip" 2>/dev/null; then
+  echo '::error::Could not retrieve the exported Hill Climb game project'; exit 1
+fi
+mkdir -p "$ARTIFACTS/export"
+if [ ! -s "$ARTIFACTS/game-export.zip" ] || ! unzip -q -o "$ARTIFACTS/game-export.zip" -d "$ARTIFACTS/export"; then
+  echo '::error::Hill Climb game project ZIP is missing or invalid'; exit 1
+fi
+chmod +x "$ARTIFACTS/export/gradlew" 2>/dev/null || true
+if ! bash "$ARTIFACTS/export/gradlew" -p "$ARTIFACTS/export" --no-daemon :app:assembleDebug > "$ARTIFACTS/export-build.log" 2>&1; then
+  grep -E 'error:|FAILURE:|What went wrong|Could not |failed' "$ARTIFACTS/export-build.log" | tail -18 | while IFS= read -r line; do echo "::error::Export build: $line"; done
+  tail -30 "$ARTIFACTS/export-build.log"
+  echo '::error::The exported Hill Climb game did not assemble into an APK'
+  exit 1
+fi
+GAME_APK="$ARTIFACTS/export/app/build/outputs/apk/debug/app-debug.apk"
+if [ ! -f "$GAME_APK" ]; then echo '::error::Hill Climb APK output is missing'; exit 1; fi
+python3 scripts/check_hill_climb_apk.py "$GAME_APK"
+cp "$GAME_APK" "$ARTIFACTS/hill-climb-debug.apk"
+GAME_ID=$(grep -E "applicationId ['\"]" "$ARTIFACTS/export/app/build.gradle" | sed -E "s/.*applicationId ['\"]([^'\"]+)['\"].*/\1/" | head -1)
+if [ -z "$GAME_ID" ]; then echo '::error::Could not determine exported Hill Climb application ID'; exit 1; fi
+if ! "$ADB" install -r "$ARTIFACTS/hill-climb-debug.apk"; then echo '::error::Could not install the Hill Climb APK on the emulator'; exit 1; fi
+if ! python3 scripts/android_capture_game.py "$ADB" "$GAME_ID" "$ARTIFACTS/hill-climb-gameplay.png"; then
+  echo '::error::Could not capture exported Hill Climb gameplay screenshot'; exit 1
+fi
+publish_blob "$ARTIFACTS/hill-climb-gameplay.png" HILL_CLIMB_GAMEPLAY_SCREENSHOT
 
 if [ "$smoke_status" -ne 0 ]; then
   collect_diagnostics "The on-device smoke test reported a failure (see the crash trace above)"
   exit 1
 fi
 
-echo '::notice::On-device verification finished: the editor installed, created projects, played them and exported a game'
+echo '::notice::On-device verification finished: editor, Hill Climb template, exported APK and gameplay screenshot passed'

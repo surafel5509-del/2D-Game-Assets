@@ -9,6 +9,7 @@ import com.world2d.engine.data.GameProject;
 import com.world2d.engine.data.J;
 import com.world2d.engine.data.ProjectStore;
 import com.world2d.engine.export.AndroidGameExporter;
+import com.world2d.engine.runtime.GameRuntime;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.junit.Test;
@@ -23,14 +24,35 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 import java.io.FileInputStream;
 
-/** The actual Android editor exports a game ZIP containing real user and bundled resources. */
+/** The actual Android editor exports the Hill Climb template, runtime and bundled resources. */
 @RunWith(AndroidJUnit4.class)
 public final class ExportSmokeTest {
     @Test public void exportedGameContainsProjectResourcesAndNativeBuild() throws Exception {
         Context context=InstrumentationRegistry.getInstrumentation().getTargetContext();
         ProjectStore store=new ProjectStore(context);
         AssetLibrary assets=new AssetLibrary(context,store);
-        GameProject project=Examples.create("platformer",assets);
+        GameProject project=Examples.create("hill-climb",assets);
+        assertEquals("hill-climb",project.data.optString("genre"));
+        boolean hasTerrain=false,hasVehicle=false,hasHeadCollider=false;
+        for(int i=0;i<GameProject.nodes(project.firstScene()).length();i++){
+            org.json.JSONObject node=GameProject.at(project.firstScene(),i);
+            hasTerrain|=GameProject.component(node,"hillTerrain")!=null;
+            hasVehicle|=GameProject.component(node,"hillVehicle")!=null;
+            hasHeadCollider|=GameProject.component(node,"hillHead")!=null;
+        }
+        assertTrue("Export fixture needs procedural ground",hasTerrain);
+        assertTrue("Export fixture needs a physics-driven vehicle",hasVehicle);
+        assertTrue("Export fixture needs a distinct driver head collider",hasHeadCollider);
+        GameRuntime simulation=new GameRuntime(context,project,null,assets);
+        try{
+            assertNotNull("Hill Climb template should activate its dedicated runtime",simulation.hillClimb);
+            simulation.setAction("right",true);
+            for(int frame=0;frame<180;frame++)simulation.tick(1f/60f);
+            simulation.setAction("right",false);
+            assertTrue("Gas input should move the vehicle through the endless terrain",
+                simulation.hillClimb.distance()>10);
+            assertTrue("Using the throttle should consume some fuel",simulation.hillClimb.fuelFraction()<1f);
+        }finally{simulation.stopAudio();}
         String id=J.id("asset"),path="assets/"+id+".png";
         File imported=store.assetFile(project,path);
         assertNotNull(imported);
@@ -70,6 +92,7 @@ public final class ExportSmokeTest {
         assertTrue(names.contains("app/src/main/assets/library/catalog.json"));
         assertTrue(names.contains("app/src/main/java/com/world2d/engine/export/GameActivity.java"));
         assertTrue(names.contains("app/src/main/java/com/world2d/engine/runtime/GameRuntime.java"));
+        assertTrue(names.contains("app/src/main/java/com/world2d/engine/runtime/HillClimbMode.java"));
         assertTrue(names.contains("gradle/wrapper/gradle-wrapper.jar"));
         assertNotNull(projectJson);
         assertEquals(project.id(),projectJson.optString("id"));

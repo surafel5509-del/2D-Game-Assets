@@ -28,7 +28,7 @@ android {
 
 def runtimeSources = [
     'data/J.java', 'data/GameProject.java', 'data/ProjectStore.java',
-    'assets/AssetLibrary.java', 'runtime/ScriptVM.java', 'runtime/GameRuntime.java',
+    'assets/AssetLibrary.java', 'runtime/ScriptVM.java', 'runtime/GameRuntime.java', 'runtime/HillClimbMode.java',
     'editor/SceneView.java', 'export/GameActivity.java'
 ]
 def runtimeAssets = layout.buildDirectory.dir('generated/game-runtime-assets')
