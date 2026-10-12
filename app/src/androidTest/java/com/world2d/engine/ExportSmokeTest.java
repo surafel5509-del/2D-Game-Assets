@@ -98,5 +98,15 @@ public final class ExportSmokeTest {
         assertEquals(project.id(),projectJson.optString("id"));
         assertEquals(1,projectJson.optJSONArray("assets").length());
         assertTrue("Actual bundled artwork should be exported",names.size()>1500);
+
+        // The QA export above deliberately includes an imported test sprite. Build the APK
+        // from a fresh template so device screenshots show only the authored Hill Climb game.
+        GameProject gameplayProject=Examples.create("hill-climb",assets);
+        File gameplayArchive=new File(context.getFilesDir(),"hill-climb-gameplay-export.zip");
+        try(FileOutputStream output=new FileOutputStream(gameplayArchive)){
+            new AndroidGameExporter(context,store,assets).write(gameplayProject,output);
+        }
+        assertTrue("Clean Hill Climb export should be available for the emulator APK build",
+            gameplayArchive.length()>500_000);
     }
 }

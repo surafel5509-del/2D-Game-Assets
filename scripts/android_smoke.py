@@ -65,9 +65,9 @@ def scroll():
 
 def find(nodes, *, text=None, contains=None, description=None, clickable=None):
     for node in nodes:
-        if text is not None and attr(node, 'text') != text:
+        if text is not None and attr(node, 'text').casefold() != text.casefold():
             continue
-        if contains is not None and contains not in attr(node, 'text'):
+        if contains is not None and contains.casefold() not in attr(node, 'text').casefold():
             continue
         if description is not None and attr(node, 'content-desc') != description:
             continue

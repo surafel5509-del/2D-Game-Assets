@@ -94,7 +94,7 @@ if ! grep -q 'OK (1 test)' "$ARTIFACTS/instrumentation.log"; then
   exit 1
 fi
 echo '::notice::Exporter instrumentation verified Hill Climb scene nodes, physics components, runtime sources and game resources'
-if ! "$ADB" exec-out run-as com.world2d.engine cat files/game-export-smoke.zip > "$ARTIFACTS/game-export.zip" 2>/dev/null; then
+if ! "$ADB" exec-out run-as com.world2d.engine cat files/hill-climb-gameplay-export.zip > "$ARTIFACTS/game-export.zip" 2>/dev/null; then
   echo '::error::Could not retrieve the exported Hill Climb game project'; exit 1
 fi
 mkdir -p "$ARTIFACTS/export"

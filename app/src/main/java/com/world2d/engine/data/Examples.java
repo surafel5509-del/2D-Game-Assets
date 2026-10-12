@@ -312,8 +312,6 @@ public final class Examples {
         GameProject.addComponent(engine,J.o("type","audio","assetId","builtin:sfx-engine",
             "autoplay",true,"loop",true,"volume",0.16));
         J.put(engine,"visible",false);J.put(engine,"locked",true);GameProject.nodes(scene).put(engine);
-        label(scene,"TRAILBLAZER  /  GREEN HILLS",485,55,22,"#f8fff1");
-        label(scene,"GAS TO CLIMB   ·   BRAKE TO PITCH   ·   COLLECT FUEL",490,91,13,"#264f51");
         JSONObject sign=art(scene,"Trail marker","builtin:prop-5",822,
             HillClimbMode.terrainHeight(822,seed)-41,46,58,2);
         J.put(J.obj(sign,"transform"),"rotation",-4);
