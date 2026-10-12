@@ -21,7 +21,7 @@ def button_center():
             run('shell', 'uiautomator', 'dump', '/sdcard/hill-climb-ui.xml')
             root = ET.fromstring(run('shell', 'cat', '/sdcard/hill-climb-ui.xml'))
             nodes = list(root.iter('node'))
-            if any("Process system isn't responding" in n.attrib.get('text', '') for n in nodes):
+            if any("isn't responding" in n.attrib.get('text', '').lower() for n in nodes):
                 saw_system_anr = True
                 wait = next((n for n in nodes if n.attrib.get('text') == 'Wait'), None)
                 match = re.fullmatch(r'\[(\d+),(\d+)\]\[(\d+),(\d+)\]',

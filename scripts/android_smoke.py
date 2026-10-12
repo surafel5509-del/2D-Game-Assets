@@ -25,7 +25,7 @@ def hierarchy():
     for _ in range(3):
         command('shell', 'uiautomator', 'dump', '/sdcard/world-smoke.xml')
         nodes = list(ET.fromstring(command('shell', 'cat', '/sdcard/world-smoke.xml')).iter('node'))
-        if not any("Process system isn't responding" in attr(node, 'text') for node in nodes):
+        if not any("isn't responding" in attr(node, 'text').lower() for node in nodes):
             return nodes
         wait = find(nodes, text='Wait', clickable='true')
         if wait is None:
