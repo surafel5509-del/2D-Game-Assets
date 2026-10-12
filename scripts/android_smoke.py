@@ -168,21 +168,24 @@ if new_project is not None:
     tap(new_project)
     time.sleep(2)
     nodes = wait_for(lambda visible: find(visible, text='Create', clickable='true') is not None, timeout=15)
-    template = find(nodes, text='Empty 2D', clickable='true') or find(nodes, contains='Empty 2D')
-    if template is not None:
-        tap(template)
-        time.sleep(2)
+    spinner = next((node for node in nodes if node.attrib.get('class') == 'android.widget.Spinner'), None)
+    template_created = False
+    if spinner is not None:
+        # Tap the Spinner itself, not its non-clickable CheckedTextView child.
+        tap(spinner)
+        time.sleep(1)
         nodes = hierarchy()
-        hill_climb = find(nodes, text='Hill Climb', clickable='true')
+        hill_climb = find(nodes, text='Hill Climb')
         if hill_climb is not None:
             tap(hill_climb)
-            time.sleep(2)
+            time.sleep(1)
             nodes = hierarchy()
             create = find(nodes, text='Create', clickable='true')
             if create is not None:
                 tap(create)
                 nodes = wait_for(lambda visible: find(visible, description='Play scene') is not None, timeout=25)
                 if find(nodes, description='Play scene') is not None:
+                    template_created = True
                     print('::notice::Hill Climb template project created and opened in the editor')
                     shoot('world-new-template-project.png')
                     command('shell', 'input', 'keyevent', '4')
@@ -195,6 +198,15 @@ if new_project is not None:
             print('::notice::Skipped the Hill Climb template check: Hill Climb option not found')
     else:
         print('::notice::Skipped the template project check: template spinner not found')
+    if not template_created:
+        # Close a possible dropdown first, then the wizard, so the sample-card smoke
+        # test always starts from the dashboard even when the template list is absent.
+        for _ in range(3):
+            nodes = hierarchy()
+            if find(nodes, contains='New project', clickable='true') is not None:
+                break
+            command('shell', 'input', 'keyevent', '4')
+            time.sleep(1)
 else:
     print('::notice::Skipped the template project check: dashboard New project action not found')
 
@@ -203,9 +215,9 @@ else:
 for _ in range(10):
     nodes = hierarchy()
     for index, node in enumerate(nodes):
-        if attr(node, 'text') == 'Trailblazer: Hill Climb':
+        if attr(node, 'text').casefold() == 'Trailblazer: Hill Climb'.casefold():
             play = next((other for other in nodes[index + 1:index + 30]
-                         if 'Play' in attr(other, 'text') and attr(other, 'clickable') == 'true'), None)
+                         if 'play' in attr(other, 'text').casefold() and attr(other, 'clickable') == 'true'), None)
             if play is not None:
                 tap(play)
                 break
